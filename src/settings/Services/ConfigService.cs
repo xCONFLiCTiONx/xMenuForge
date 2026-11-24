@@ -189,6 +189,7 @@ public static class ConfigService
         // Modifier-gated power tools (Hold Ctrl / Alt / Ctrl+Alt)
         AddBuiltIn("builtin.take_ownership", "Take Ownership", "Take ownership and grant Full Control recursively", @"Icons\Take Ownership.ico", "take_ownership", true, true, false, "", "ctrl");
         AddBuiltIn("builtin.flip_image", "Flip Image Horizontally", "Flip selected image horizontally in place", @"C:\WINDOWS\System32\imageres.dll,108", "flip_image", true, false, false, "", "ctrl", ["Images"]);
+        AddBuiltIn("builtin.rotate_image", "Rotate Image", "Rotate selected image 90° clockwise in place", @"C:\Windows\System32\imageres.dll,67", "rotate_image", true, false, false, "", "none", ["Images"]);
         AddBuiltIn("builtin.create_junction", "Create Junction...", "Create an NTFS directory junction to this folder", @"C:\WINDOWS\System32\imageres.dll,166", "create_junction", false, true, false, "", "ctrl");
         AddBuiltIn("builtin.mount_image", "Mount Disk Image", "Mount ISO/VHD/VHDX disk image", @"C:\Windows\System32\imageres.dll,56", "mount_image", true, false, false, "", "ctrl", ["DiskImages"]);
         AddBuiltIn("builtin.unmount_image", "Unmount Disk Image", "Dismount mounted ISO/VHD/VHDX disk image", @"C:\Windows\System32\imageres.dll,268", "unmount_image", true, false, false, "", "ctrl", ["DiskImages"]);

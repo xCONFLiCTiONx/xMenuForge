@@ -280,6 +280,8 @@ AppConfig CreateDefaultConfig() {
                L"Icons\\Take Ownership.ico", L"take_ownership", true, true, false, L"", L"ctrl");
     addBuiltIn(L"builtin.flip_image", L"Flip Image Horizontally", L"Flip selected image horizontally in place",
                L"C:\\WINDOWS\\System32\\imageres.dll,108", L"flip_image", true, false, false, L"", L"ctrl", {L"Images"});
+    addBuiltIn(L"builtin.rotate_image", L"Rotate Image", L"Rotate selected image 90° clockwise in place",
+               L"C:\\Windows\\System32\\imageres.dll,67", L"rotate_image", true, false, false, L"", L"none", {L"Images"});
     addBuiltIn(L"builtin.create_junction", L"Create Junction...", L"Create an NTFS directory junction to this folder",
                L"C:\\WINDOWS\\System32\\imageres.dll,166", L"create_junction", false, true, false, L"", L"ctrl");
     addBuiltIn(L"builtin.mount_image", L"Mount Disk Image", L"Mount ISO/VHD/VHDX disk image",

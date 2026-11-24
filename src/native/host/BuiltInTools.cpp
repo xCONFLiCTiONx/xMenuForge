@@ -389,8 +389,24 @@ bool TryRunExtendedBuiltIn(
     }
     if (act == L"flip_image") {
         if (ctx.paths.empty()) { outExitCode = 1; return true; }
-        std::wstring f = EscapePsSingle(ctx.paths[0]);
-        outExitCode = LaunchPowerShell(L"Add-Type -AssemblyName System.Drawing; $p='" + f + L"'; $i=[System.Drawing.Image]::FromFile($p); $i.RotateFlip('RotateNoneFlipX'); $tmp=$p+'.xmf.tmp'; $i.Save($tmp, $i.RawFormat); $i.Dispose(); Move-Item -LiteralPath $tmp -Destination $p -Force", false, false);
+        std::wstring list;
+        for (size_t i = 0; i < ctx.paths.size(); ++i) {
+            if (i > 0) list += L",";
+            list += L"'" + EscapePsSingle(ctx.paths[i]) + L"'";
+        }
+        outExitCode = LaunchPowerShell(L"Add-Type -AssemblyName System.Drawing; foreach($p in @(" + list + L")){ $i=[System.Drawing.Image]::FromFile($p); $fmt=$i.RawFormat; $i.RotateFlip([System.Drawing.RotateFlipType]::RotateNoneFlipX); $tmp=$p+'.xmf.tmp'; $i.Save($tmp, $fmt); $i.Dispose(); Move-Item -LiteralPath $tmp -Destination $p -Force }", false, false);
+        for (const auto& p : ctx.paths) SHChangeNotify(SHCNE_UPDATEITEM, SHCNF_PATHW, p.c_str(), nullptr);
+        return true;
+    }
+    if (act == L"rotate_image") {
+        if (ctx.paths.empty()) { outExitCode = 1; return true; }
+        std::wstring list;
+        for (size_t i = 0; i < ctx.paths.size(); ++i) {
+            if (i > 0) list += L",";
+            list += L"'" + EscapePsSingle(ctx.paths[i]) + L"'";
+        }
+        outExitCode = LaunchPowerShell(L"Add-Type -AssemblyName System.Drawing; foreach($p in @(" + list + L")){ $i=[System.Drawing.Image]::FromFile($p); $fmt=$i.RawFormat; $i.RotateFlip([System.Drawing.RotateFlipType]::Rotate90FlipNone); $tmp=$p+'.xmf.tmp'; $i.Save($tmp, $fmt); $i.Dispose(); Move-Item -LiteralPath $tmp -Destination $p -Force }", false, false);
+        for (const auto& p : ctx.paths) SHChangeNotify(SHCNE_UPDATEITEM, SHCNF_PATHW, p.c_str(), nullptr);
         return true;
     }
     if (act == L"create_junction") {
