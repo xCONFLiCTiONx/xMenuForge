@@ -15,4 +15,7 @@
     <Product>xMenuForge</Product>
     <Company>xCONFLiCTiONx</Company>
   </PropertyGroup>
+  <ItemGroup>
+    <Resource Include="..\..\assets\Icons\Dark\ICON.png" Link="Assets\AppIcon.png" />
+  </ItemGroup>
 </Project>
