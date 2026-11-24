@@ -11,6 +11,22 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+# Require Administrator when installing to Program Files / registering AppXSvc
+if ($Install) {
+    $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
+        [Security.Principal.WindowsBuiltInRole]::Administrator
+    )
+    if (-not $isAdmin) {
+        Write-Host "Elevation required for -Install. Relaunching as Administrator..." -ForegroundColor Yellow
+        $argList = @("-ExecutionPolicy", "Bypass", "-File", "`"$PSCommandPath`"", "-Configuration", $Configuration, "-Install", "-InstallDir", "`"$InstallDir`"")
+        if ($EnableClassicMenu) { $argList += "-EnableClassicMenu" }
+        if ($RestartExplorer) { $argList += "-RestartExplorer" }
+        if ($BuildInstaller) { $argList += "-BuildInstaller" }
+        $proc = Start-Process -FilePath "powershell.exe" -ArgumentList $argList -Verb RunAs -Wait -PassThru
+        exit $proc.ExitCode
+    }
+}
+
 $RootDir = $PSScriptRoot
 $NativeSrc = Join-Path $RootDir "src\native"
 $NativeBuild = Join-Path $RootDir "build\native"
@@ -68,8 +84,10 @@ Copy-FileSafe $HostExe $StageDir
 Copy-Item -Path (Join-Path $SettingsOut "*") -Destination $StageDir -Recurse -Force
 Copy-Item -Path (Join-Path $RootDir "AppxManifest.xml") -Destination $StageDir -Force
 Copy-Item -Path (Join-Path $RootDir "assets\xMenuForge.ico") -Destination $StageDir -Force
-Copy-Item -Path (Join-Path $RootDir "assets\Assets") -Destination (Join-Path $StageDir "Assets") -Recurse -Force
-Copy-Item -Path (Join-Path $RootDir "assets\Icons") -Destination (Join-Path $StageDir "Icons") -Recurse -Force
+New-Item -Path (Join-Path $StageDir "Assets") -ItemType Directory -Force | Out-Null
+New-Item -Path (Join-Path $StageDir "Icons") -ItemType Directory -Force | Out-Null
+Copy-Item -Path (Join-Path $RootDir "assets\Assets\*") -Destination (Join-Path $StageDir "Assets") -Recurse -Force
+Copy-Item -Path (Join-Path $RootDir "assets\Icons\*") -Destination (Join-Path $StageDir "Icons") -Recurse -Force
 
 Write-Host "Staged files ready: $StageDir" -ForegroundColor Green
 
@@ -106,8 +124,10 @@ if ($Install) {
     Copy-Item -Path (Join-Path $SettingsOut "*") -Destination $InstallDir -Recurse -Force
     Copy-Item -Path (Join-Path $RootDir "AppxManifest.xml") -Destination $InstallDir -Force
     Copy-Item -Path (Join-Path $RootDir "assets\xMenuForge.ico") -Destination $InstallDir -Force
-    Copy-Item -Path (Join-Path $RootDir "assets\Assets") -Destination (Join-Path $InstallDir "Assets") -Recurse -Force
-    Copy-Item -Path (Join-Path $RootDir "assets\Icons") -Destination (Join-Path $InstallDir "Icons") -Recurse -Force
+    New-Item -Path (Join-Path $InstallDir "Assets") -ItemType Directory -Force | Out-Null
+    New-Item -Path (Join-Path $InstallDir "Icons") -ItemType Directory -Force | Out-Null
+    Copy-Item -Path (Join-Path $RootDir "assets\Assets\*") -Destination (Join-Path $InstallDir "Assets") -Recurse -Force
+    Copy-Item -Path (Join-Path $RootDir "assets\Icons\*") -Destination (Join-Path $InstallDir "Icons") -Recurse -Force
 
     $InstalledHost = Join-Path $InstallDir "xMenuForge.Host.exe"
     $regArgs = @("--register")

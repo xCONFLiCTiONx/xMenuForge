@@ -28,6 +28,42 @@ static std::vector<std::wstring> ReadTargetsFile(const std::wstring& filePath) {
     return lines;
 }
 
+static bool IsProcessAdmin() {
+    BOOL isAdmin = FALSE;
+    PSID adminGroup = nullptr;
+    SID_IDENTIFIER_AUTHORITY ntAuth = SECURITY_NT_AUTHORITY;
+    if (AllocateAndInitializeSid(&ntAuth, 2, SECURITY_BUILTIN_DOMAIN_RID, DOMAIN_ALIAS_RID_ADMINS,
+                                 0, 0, 0, 0, 0, 0, &adminGroup)) {
+        CheckTokenMembership(nullptr, adminGroup, &isAdmin);
+        FreeSid(adminGroup);
+    }
+    return isAdmin == TRUE;
+}
+
+static int ElevateSelfAndWait(const std::vector<std::wstring>& args) {
+    WCHAR exePath[MAX_PATH] = {};
+    if (GetModuleFileNameW(nullptr, exePath, MAX_PATH) == 0) return 1;
+    std::wstring params;
+    for (const auto& a : args) {
+        if (!params.empty()) params += L" ";
+        params += L"\"" + a + L"\"";
+    }
+    SHELLEXECUTEINFOW sei{sizeof(sei)};
+    sei.fMask = SEE_MASK_NOCLOSEPROCESS;
+    sei.lpVerb = L"runas";
+    sei.lpFile = exePath;
+    sei.lpParameters = params.c_str();
+    sei.nShow = SW_HIDE;
+    if (!ShellExecuteExW(&sei)) return 1;
+    DWORD exitCode = 0;
+    if (sei.hProcess) {
+        WaitForSingleObject(sei.hProcess, 60000);
+        GetExitCodeProcess(sei.hProcess, &exitCode);
+        CloseHandle(sei.hProcess);
+    }
+    return static_cast<int>(exitCode);
+}
+
 int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
 
@@ -56,6 +92,11 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     std::wstring mode = args[0];
 
     if (mode == L"--register") {
+        if (!IsProcessAdmin()) {
+            int rc = ElevateSelfAndWait(args);
+            CoUninitialize();
+            return rc;
+        }
         bool enableClassic = false;
         bool restartExplorer = false;
         for (size_t i = 1; i < args.size(); ++i) {
@@ -69,6 +110,11 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     }
 
     if (mode == L"--unregister") {
+        if (!IsProcessAdmin()) {
+            int rc = ElevateSelfAndWait(args);
+            CoUninitialize();
+            return rc;
+        }
         bool restartExplorer = false;
         for (size_t i = 1; i < args.size(); ++i) {
             if (args[i] == L"--restart-explorer") restartExplorer = true;

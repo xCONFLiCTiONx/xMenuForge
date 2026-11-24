@@ -26,6 +26,16 @@ static bool SetHkcuString(const std::wstring& subKey, const std::wstring& valueN
     return rc == ERROR_SUCCESS;
 }
 
+static bool SetHkcuDword(const std::wstring& subKey, const std::wstring& valueName, DWORD data) {
+    HKEY hKey = nullptr;
+    if (RegCreateKeyExW(HKEY_CURRENT_USER, subKey.c_str(), 0, nullptr, REG_OPTION_NON_VOLATILE, KEY_SET_VALUE, nullptr, &hKey, nullptr) != ERROR_SUCCESS) {
+        return false;
+    }
+    LONG rc = RegSetValueExW(hKey, valueName.c_str(), 0, REG_DWORD, reinterpret_cast<const BYTE*>(&data), sizeof(data));
+    RegCloseKey(hKey);
+    return rc == ERROR_SUCCESS;
+}
+
 static bool HkcuKeyExists(const std::wstring& subKey) {
     HKEY hKey = nullptr;
     if (RegOpenKeyExW(HKEY_CURRENT_USER, subKey.c_str(), 0, KEY_READ, &hKey) == ERROR_SUCCESS) {
@@ -180,6 +190,16 @@ bool RegisterAll(const std::wstring& installDir, bool enableClassic, bool restar
         return false;
     }
 
+    // 4. Enable xMenuForge in Windows 11 26H2+ Explorer ContextMenu Preferences
+    // (When ShowExtensions=0, Windows hides new packaged extensions until enabled here)
+    std::wstring pfnOut;
+    if (RunPowerShell(L"$p = Get-AppxPackage -Name '" + std::wstring(kPackageName) + L"' -ErrorAction SilentlyContinue; if ($p) { Write-Output $p.PackageFamilyName }", pfnOut, 15000)) {
+        while (!pfnOut.empty() && (pfnOut.back() == L'\r' || pfnOut.back() == L'\n' || pfnOut.back() == L' ')) pfnOut.pop_back();
+        if (!pfnOut.empty()) {
+            SetHkcuDword(L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\ContextMenu\\Preferences\\extensions\\" + pfnOut, L"Enabled", 1);
+        }
+    }
+
     if (restartExplorer) {
         std::wstring expOut;
         RunPowerShell(L"Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue; Start-Sleep -Milliseconds 600; if (-not (Get-Process explorer -ErrorAction SilentlyContinue)) { Start-Process explorer.exe }", expOut, 15000);
@@ -202,6 +222,7 @@ bool UnregisterAll(bool restartExplorer, std::wstring& outMessage) {
     DeleteHkcuTree(L"Software\\Classes\\*\\shellex\\ContextMenuHandlers\\xMenuForge");
     DeleteHkcuTree(L"Software\\Classes\\Directory\\shellex\\ContextMenuHandlers\\xMenuForge");
     DeleteHkcuTree(L"Software\\Classes\\Directory\\Background\\shellex\\ContextMenuHandlers\\xMenuForge");
+    DeleteHkcuTree(L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\ContextMenu\\Preferences\\extensions\\xCONFLiCTiONx.xMenuForge_hex857hc9nqtm");
 
     if (restartExplorer) {
         std::wstring expOut;
