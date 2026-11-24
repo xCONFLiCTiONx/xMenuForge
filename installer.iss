@@ -2,12 +2,18 @@
 #define AppName "xMenuForge"
 #define AppVersion "1.0.0.0"
 #define AppPublisher "xCONFLiCTiONx"
+#define AppURL "https://xconflictionx.cc"
+#define AppContact "info@xconflictionx.cc"
 
 [Setup]
 AppId={{7A4E9C10-5B2D-4F81-A310-9C6E2B410001}
 AppName={#AppName}
 AppVersion={#AppVersion}
 AppPublisher={#AppPublisher}
+AppPublisherURL={#AppURL}
+AppSupportURL={#AppURL}
+AppUpdatesURL={#AppURL}
+AppContact={#AppContact}
 DefaultDirName={autopf}\{#AppName}
 DefaultGroupName={#AppName}
 UninstallDisplayIcon={app}\xMenuForge.ico
