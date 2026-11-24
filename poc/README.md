@@ -32,5 +32,5 @@ The manifest is a registration template. The installer/test harness is intention
 ## Current limitations
 
 - This first implementation pass is source-only and has not been compiled or run on the user's Windows machine.
-- The grandchild probe currently represents the depth boundary in the test plan; the COM implementation intentionally exposes only the first level to Explorer.
+- The COM object graph deliberately returns a grandchild from a first-level child, so the test exercises the recursive API shape that Microsoft's documentation says Explorer does not support. The expected supported UI remains one flyout level.
 - No settings UI, installer, or product command model is included.
