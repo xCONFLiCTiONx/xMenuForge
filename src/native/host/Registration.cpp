@@ -139,6 +139,13 @@ bool RegisterAll(const std::wstring& installDir, bool enableClassic, bool restar
         return false;
     }
 
+    // 0. Ensure AppContainer / Windows 11 PackagedCom can read & execute the shell DLL
+    std::wstring aclOut;
+    RunPowerShell(
+        L"icacls '" + dir.wstring() + L"' /grant '*S-1-15-2-1:(OI)(CI)RX' /grant '*S-1-15-2-2:(OI)(CI)RX' /T /Q | Out-Null",
+        aclOut,
+        15000);
+
     // 1. Register HKCU COM InprocServer32 for Modern IExplorerCommand
     std::wstring modernKey = std::wstring(L"Software\\Classes\\CLSID\\") + kModernClsid + L"\\InprocServer32";
     SetHkcuString(modernKey, L"", dllPath.wstring());

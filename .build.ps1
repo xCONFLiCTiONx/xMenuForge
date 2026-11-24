@@ -49,13 +49,22 @@ if ($LASTEXITCODE -ne 0) { throw "WPF Settings publish failed." }
 
 # 4. Stage Complete Release Package
 Write-Host "[3/4] Staging distribution package at $StageDir..." -ForegroundColor Yellow
-if (Test-Path $StageDir) {
-    Remove-Item -Path $StageDir -Recurse -Force
-}
 New-Item -Path $StageDir -ItemType Directory -Force | Out-Null
+Get-ChildItem -Path $StageDir -Filter "*.old" -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
 
-Copy-Item -Path $ShellDll -Destination $StageDir -Force
-Copy-Item -Path $HostExe -Destination $StageDir -Force
+function Copy-FileSafe([string]$Src, [string]$DestDir) {
+    $dest = Join-Path $DestDir (Split-Path $Src -Leaf)
+    try {
+        Copy-Item -Path $Src -Destination $dest -Force -ErrorAction Stop
+    } catch {
+        $backup = "$dest.$([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()).old"
+        Move-Item -Path $dest -Destination $backup -Force
+        Copy-Item -Path $Src -Destination $dest -Force
+    }
+}
+
+Copy-FileSafe $ShellDll $StageDir
+Copy-FileSafe $HostExe $StageDir
 Copy-Item -Path (Join-Path $SettingsOut "*") -Destination $StageDir -Recurse -Force
 Copy-Item -Path (Join-Path $RootDir "AppxManifest.xml") -Destination $StageDir -Force
 Copy-Item -Path (Join-Path $RootDir "assets\xMenuForge.ico") -Destination $StageDir -Force
@@ -91,7 +100,14 @@ if ($Install) {
     Get-Process -Name "xMenuForge.Settings", "xMenuForge.Host" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
 
     New-Item -Path $InstallDir -ItemType Directory -Force | Out-Null
-    Copy-Item -Path (Join-Path $StageDir "*") -Destination $InstallDir -Recurse -Force
+    Get-ChildItem -Path $InstallDir -Filter "*.old" -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+    Copy-FileSafe $ShellDll $InstallDir
+    Copy-FileSafe $HostExe $InstallDir
+    Copy-Item -Path (Join-Path $SettingsOut "*") -Destination $InstallDir -Recurse -Force
+    Copy-Item -Path (Join-Path $RootDir "AppxManifest.xml") -Destination $InstallDir -Force
+    Copy-Item -Path (Join-Path $RootDir "assets\xMenuForge.ico") -Destination $InstallDir -Force
+    Copy-Item -Path (Join-Path $RootDir "assets\Assets") -Destination (Join-Path $InstallDir "Assets") -Recurse -Force
+    Copy-Item -Path (Join-Path $RootDir "assets\Icons") -Destination (Join-Path $InstallDir "Icons") -Recurse -Force
 
     $InstalledHost = Join-Path $InstallDir "xMenuForge.Host.exe"
     $regArgs = @("--register")

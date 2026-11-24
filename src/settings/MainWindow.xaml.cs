@@ -29,11 +29,23 @@ public partial class MainWindow : Window
         SourceInitialized += (_, _) => ApplyDwmDarkFrame();
         Loaded += async (_, _) =>
         {
+            FitToWorkArea();
             _config = ConfigService.Load();
             BuildCategoryRuleCheckboxes();
             RefreshAllViews();
             await RefreshHealthAsync();
         };
+    }
+
+    private void FitToWorkArea()
+    {
+        var wa = SystemParameters.WorkArea;
+        double maxW = Math.Min(1280, wa.Width - 36);
+        double maxH = Math.Min(720, wa.Height - 36);
+        if (maxW >= MinWidth && Width > maxW) Width = maxW;
+        if (maxH >= MinHeight && Height > maxH) Height = maxH;
+        Left = wa.Left + Math.Max(0, (wa.Width - Width) / 2);
+        Top = wa.Top + Math.Max(0, (wa.Height - Height) / 2);
     }
 
     private void ApplyDwmDarkFrame()
