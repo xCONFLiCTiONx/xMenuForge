@@ -1,0 +1,124 @@
+#include <windows.h>
+#include <objbase.h>
+#include <shellapi.h>
+
+#include <filesystem>
+#include <fstream>
+#include <string>
+#include <vector>
+
+#include "../common/Config.h"
+#include "CommandRunner.h"
+#include "Dialogs.h"
+#include "Registration.h"
+
+namespace fs = std::filesystem;
+
+static std::vector<std::wstring> ReadTargetsFile(const std::wstring& filePath) {
+    std::vector<std::wstring> lines;
+    std::ifstream ifs(filePath, std::ios::binary);
+    if (!ifs.is_open()) return lines;
+    std::string line;
+    while (std::getline(ifs, line)) {
+        if (!line.empty() && line.back() == '\r') line.pop_back();
+        if (!line.empty()) lines.push_back(xmf::Utf8ToWide(line));
+    }
+    ifs.close();
+    DeleteFileW(filePath.c_str());
+    return lines;
+}
+
+int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
+    CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+
+    int argc = 0;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+    if (!argv) {
+        CoUninitialize();
+        return 1;
+    }
+
+    std::vector<std::wstring> args;
+    for (int i = 1; i < argc; ++i) args.emplace_back(argv[i]);
+    LocalFree(argv);
+
+    if (args.empty()) {
+        // Default launch (e.g., Start Menu or AppX activation): open Settings UI
+        std::wstring settingsExe = xmf::host::GetHostDirectory() + L"\\xMenuForge.Settings.exe";
+        if (fs::exists(settingsExe)) {
+            AllowSetForegroundWindow(ASFW_ANY);
+            ShellExecuteW(nullptr, L"open", settingsExe.c_str(), nullptr, xmf::host::GetHostDirectory().c_str(), SW_SHOWNORMAL);
+        }
+        CoUninitialize();
+        return 0;
+    }
+
+    std::wstring mode = args[0];
+
+    if (mode == L"--register") {
+        bool enableClassic = false;
+        bool restartExplorer = false;
+        for (size_t i = 1; i < args.size(); ++i) {
+            if (args[i] == L"--classic") enableClassic = true;
+            if (args[i] == L"--restart-explorer") restartExplorer = true;
+        }
+        std::wstring msg;
+        bool ok = xmf::reg::RegisterAll(xmf::host::GetHostDirectory(), enableClassic, restartExplorer, msg);
+        CoUninitialize();
+        return ok ? 0 : 1;
+    }
+
+    if (mode == L"--unregister") {
+        bool restartExplorer = false;
+        for (size_t i = 1; i < args.size(); ++i) {
+            if (args[i] == L"--restart-explorer") restartExplorer = true;
+        }
+        std::wstring msg;
+        bool ok = xmf::reg::UnregisterAll(restartExplorer, msg);
+        CoUninitialize();
+        return ok ? 0 : 1;
+    }
+
+    if (mode == L"--take-ownership-elevated") {
+        std::vector<std::wstring> paths(args.begin() + 1, args.end());
+        xmf::host::ShowTakeOwnershipDialog(paths, true);
+        CoUninitialize();
+        return 0;
+    }
+
+    if ((mode == L"--invoke" || mode == L"--flyout") && args.size() >= 2) {
+        std::wstring targetId = args[1];
+        xmf::SelectionContext ctx;
+        POINT pt{};
+        GetCursorPos(&pt);
+
+        for (size_t i = 2; i < args.size(); ++i) {
+            if (args[i] == L"--targets-file" && i + 1 < args.size()) {
+                ctx.paths = ReadTargetsFile(args[++i]);
+            } else if (args[i] == L"--target" && i + 1 < args.size()) {
+                ctx.paths.push_back(args[++i]);
+            } else if (args[i] == L"--background") {
+                ctx.isBackground = true;
+            } else if (args[i] == L"--folder") {
+                ctx.isFolder = true;
+            } else if (args[i] == L"--x" && i + 1 < args.size()) {
+                pt.x = _wtoi(args[++i].c_str());
+            } else if (args[i] == L"--y" && i + 1 < args.size()) {
+                pt.y = _wtoi(args[++i].c_str());
+            }
+        }
+
+        xmf::AppConfig cfg = xmf::LoadConfig();
+        int rc = 0;
+        if (mode == L"--flyout") {
+            xmf::host::ShowCategoryFlyout(cfg, targetId, ctx, pt);
+        } else {
+            rc = xmf::host::ExecuteCommandById(cfg, targetId, ctx, pt);
+        }
+        CoUninitialize();
+        return rc;
+    }
+
+    CoUninitialize();
+    return 0;
+}

@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <AssemblyName>xMenuForge.Settings</AssemblyName>
+    <RootNamespace>xMenuForge.Settings</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>..\..\assets\xMenuForge.ico</ApplicationIcon>
+    <Platforms>x64</Platforms>
+    <PlatformTarget>x64</PlatformTarget>
+    <Version>1.0.0</Version>
+    <Product>xMenuForge</Product>
+    <Company>xCONFLiCTiONx</Company>
+  </PropertyGroup>
+</Project>

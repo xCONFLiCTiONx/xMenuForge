@@ -2,56 +2,38 @@
 
 **Your Windows. Your commands. Your context menu.**
 
-xMenuForge is the planned successor to [xToolsMenu](https://github.com/xCONFLiCTiONx/xToolsMenu): a native Windows context-menu platform built around configurable commands, context-aware visibility, and a polished dark settings experience.
+xMenuForge is the native Windows 11 successor to [xToolsMenu](https://github.com/xCONFLiCTiONx/xToolsMenu): a customizable context-menu platform with a native C++20 COM shell extension, an isolated native command execution host, and a fully dark-themed WPF Settings application.
 
-The goal is to make Explorer's context menu genuinely useful without making it cluttered. Users will be able to compose their own command collections, organize them into categories, control where each command appears, and define exactly how commands execute.
+## Architecture
 
-> **Development status: Architecture and compatibility validation.** No release build is available yet. The modern Windows 11 menu's supported submenu depth is a release-blocking design question and will be proven on a real Windows installation before the menu architecture is committed.
+- **`xMenuForge.Shell.dll` (C++20 COM In-Process Server)**
+  - **Windows 11 Modern Context Menu (`IExplorerCommand` + `IObjectWithSite` + `IEnumExplorerCommand`)** registered via Sparse Package (`AppxManifest.xml` using `windows.comServer` + `windows.fileExplorerContextMenus`).
+  - Strictly adheres to Microsoft's documented `IExplorerCommand::EnumSubCommands` 1-level contract: nested categories are rendered either as a **Category Flyout** (fast dark-themed cursor popup supporting arbitrary nesting) or **Flattened with Visual Separators** (`ECF_SEPARATORBEFORE`).
+  - **Optional Classic Context Menu (`IContextMenu` + `IShellExtInit`)** with full recursive Win32 `HMENU` cascading submenus.
+  - Zero heavy work inside Explorer: COM `Invoke` immediately hands off to `xMenuForge.Host.exe`.
+- **`xMenuForge.Host.exe` (C++20 Command Runner & Native Dialogs)**
+  - Isolated process execution engine supporting **Executable / GUI**, **PowerShell** (`pwsh` / `powershell`), **CMD**, and **Windows Terminal** (`wt.exe`).
+  - Per-command **Console Visibility** (`Default`, `Show`, `Hide`), working directory policy (`Target`, `Parent`, `Custom`), argument token expansion (`{path}`, `{paths}`, `{dir}`, `{name}`, `{stem}`, `{ext}`, `%1`, `%V`), environment variables, elevation (`runas`), timeouts, and structured JSONL execution logging (`%LOCALAPPDATA%\xMenuForge\logs\executions.jsonl`) with stdout/stderr capture for hidden commands.
+  - Built-in tools carried forward from xToolsMenu: **Attributes** (dark-themed dialog with timestamps & Explorer visibility toggles), **Windows Terminal / PowerShell / CMD** (normal & Admin), **Edit With**, **System Folders**, **Paste to File**, **Copy Name**, **Copy Path**, and **Take Ownership** (auto-elevating dark progress dialog).
+- **`xMenuForge.Settings.exe` (WPF .NET 10, Obsidian Fluent Dark)**
+  - Fully dark-themed (custom borderless title bar, DWM dark frame & rounded corners, dark modals, Per-Monitor V2 DPI aware, max size `1280 × 720`).
+  - 9 navigation sections: **Overview**, **Menu Designer** (drag-and-drop + live context menu preview), **Commands**, **Custom Commands**, **Execution**, **Appearance**, **Context Rules**, **Integrations**, and **Diagnostics**.
+  - Versioned configuration stored atomically at `%LOCALAPPDATA%\xMenuForge\config.json` with one-click **Import from xToolsMenu**.
 
-## Product goals
+## Build & Install (Release | x64)
 
-- Native Windows Explorer integration; no background service required for ordinary menu display.
-- User-defined commands and categories, with ordering, icons, enable/disable controls, and context rules.
-- Context-aware targeting for files, folders, and directory backgrounds.
-- File-extension and file-category filtering.
-- Per-command execution settings: show, hide, or inherit console visibility; working directory; arguments; environment; elevation; timeout; output and exit-code reporting.
-- Built-in tools carried forward from xToolsMenu where they remain useful.
-- A fully dark, polished settings application, designed for a maximum main-window size of 1280 × 720.
-- Reliable install, update, repair, and uninstall behavior that preserves user configuration.
-- Release-first build and packaging workflow.
+Prerequisites: Visual Studio 2022/2026 C++ Desktop toolchain + Windows 11 SDK + CMake + .NET 10 SDK (optional: Inno Setup 6 for `xMenuForge_Setup.exe`).
 
-## Language and platform
+```powershell
+# Build Release | x64 and stage to dist\xMenuForge
+.\.build.ps1
 
-The implementation baseline is **C++20** for native Windows integration, COM interfaces, process execution, and shared application logic. The shell extension and settings application will remain native Windows software. The settings UI framework will be selected after the existing application and available Windows SDK/toolchain are audited; it will not be chosen merely for novelty.
+# Build, install to %LOCALAPPDATA%\Programs\xMenuForge, and register with Explorer
+.\.build.ps1 -Install -RestartExplorer
 
-## Compatibility rule: prove menu depth first
-
-Windows exposes IExplorerCommand and IEnumExplorerCommand for modern context-menu extensions. The existing xToolsMenu implementation uses a root command with enumerated child commands. Microsoft documents limitations around recursive subcommands; therefore, xMenuForge will not assume that an extra submenu level or an app-extension grouping trick is supported.
-
-A small, isolated proof of concept must establish, on the target Windows build:
-
-1. The maximum supported submenu depth for the chosen registration model.
-2. Whether separately registered commands from one app are grouped, and exactly how that grouping behaves.
-3. Whether the behavior survives Explorer restart, sign-out, and reboot.
-4. Whether icons, context filtering, and command invocation remain reliable.
-
-If the modern menu cannot provide the desired hierarchy, the product will use a supported, clearly documented fallback rather than ship a fragile workaround.
-
-## Planned settings areas
-
-Overview · Menu Designer · Commands · Custom Commands · Execution · Appearance · Context Rules · Integrations · Diagnostics
-
-## Build and development
-
-- Visual Studio / MSBuild C++ toolchain and Windows SDK.
-- PowerShell build entry point: .build.ps1.
-- Default build configuration: **Release | x64**.
-- No Docker, GitHub Actions, paid build services, or unnecessary downloaded runtimes.
-- Every meaningful change should be committed, and a feature is not considered complete until its Release build and relevant behavior have been tested.
-
-## Feature reference
-
-The existing xToolsMenu repository is the behavioral reference, not a codebase to copy blindly. See [the feature inventory](docs/feature-inventory.md) and [the architecture decision record](docs/architecture/0001-platform-and-validation.md).
+# Build including Inno Setup installer (dist\xMenuForge_Setup.exe)
+.\.build.ps1 -BuildInstaller
+```
 
 ## License
 

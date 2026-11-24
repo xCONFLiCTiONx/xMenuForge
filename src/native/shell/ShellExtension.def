@@ -1,0 +1,4 @@
+LIBRARY "xMenuForge.Shell"
+EXPORTS
+    DllGetClassObject PRIVATE
+    DllCanUnloadNow PRIVATE
