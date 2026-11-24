@@ -80,8 +80,8 @@ struct AppearanceConfig {
     std::wstring rootMenuTitle = L"xMenuForge";
     std::wstring rootMenuIcon = L"Icons\\ICON.ico";
     bool showIcons = true;
-    std::wstring iconTheme = L"auto";         // auto | dark | light
-    std::wstring modernSubmenuMode = L"flyout"; // flyout | flatten
+    std::wstring iconTheme = L"auto";            // auto | dark | light
+    std::wstring modernSubmenuMode = L"direct";  // direct | single
     bool windowMaximized = false;
 };
 

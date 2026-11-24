@@ -181,9 +181,9 @@ public partial class MainWindow : Window
         int customCmds = _config.Items.Count(i => i.Kind == "command" && !i.BuiltIn);
         OverviewCmdCount.Text = $"{totalCmds} enabled";
         OverviewCustomCount.Text = $"{customCmds} custom command(s) configured";
-        OverviewSubmenuMode.Text = _config.Appearance.ModernSubmenuMode == "flatten"
-            ? "Flatten + Separators"
-            : "Category Flyout";
+        OverviewSubmenuMode.Text = _config.Appearance.ModernSubmenuMode is "single" or "flatten"
+            ? "Single Root (Flat)"
+            : "Direct Root (Native)";
     }
 
     private void RefreshLogs()
@@ -328,7 +328,7 @@ public partial class MainWindow : Window
 
     private void RefreshDesignerList()
     {
-        string? prevId = (DesignerList.SelectedItem as ListBoxItem)?.Tag as string;
+        var prevIds = DesignerList.SelectedItems.OfType<ListBoxItem>().Select(x => x.Tag as string).Where(x => x != null).ToHashSet();
         DesignerList.Items.Clear();
 
         foreach (var row in BuildOrderedHierarchy())
@@ -388,15 +388,17 @@ public partial class MainWindow : Window
 
             lbi.Content = grid;
             DesignerList.Items.Add(lbi);
-            if (item.Id == prevId) DesignerList.SelectedItem = lbi;
+            if (prevIds.Contains(item.Id)) lbi.IsSelected = true;
         }
     }
 
-    private MenuItemConfig? GetSelectedDesignerItem()
+    private List<MenuItemConfig> GetSelectedDesignerItems()
     {
-        if (DesignerList.SelectedItem is not ListBoxItem lbi || lbi.Tag is not string id) return null;
-        return _config.Items.FirstOrDefault(i => i.Id == id);
+        var ids = DesignerList.SelectedItems.OfType<ListBoxItem>().Select(x => x.Tag as string).Where(x => !string.IsNullOrEmpty(x)).ToHashSet();
+        return _config.Items.Where(i => ids.Contains(i.Id)).ToList();
     }
+
+    private MenuItemConfig? GetSelectedDesignerItem() => GetSelectedDesignerItems().FirstOrDefault();
 
     private void DesignerList_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
@@ -406,38 +408,47 @@ public partial class MainWindow : Window
     private void DesignerList_PreviewMouseMove(object sender, MouseEventArgs e)
     {
         if (e.LeftButton != MouseButtonState.Pressed) return;
+        if ((Keyboard.Modifiers & (ModifierKeys.Shift | ModifierKeys.Control)) != 0) return;
         Point pos = e.GetPosition(null);
         if (Math.Abs(pos.X - _dragStartPoint.X) < SystemParameters.MinimumHorizontalDragDistance &&
             Math.Abs(pos.Y - _dragStartPoint.Y) < SystemParameters.MinimumVerticalDragDistance)
             return;
 
-        if (DesignerList.SelectedItem is ListBoxItem lbi && lbi.Tag is string id)
+        var selected = GetSelectedDesignerItems();
+        if (selected.Count > 0)
         {
-            DragDrop.DoDragDrop(DesignerList, id, DragDropEffects.Move);
+            string payload = string.Join("\n", selected.Select(s => s.Id));
+            DragDrop.DoDragDrop(DesignerList, payload, DragDropEffects.Move);
         }
     }
 
     private void DesignerList_Drop(object sender, DragEventArgs e)
     {
         if (!e.Data.GetDataPresent(DataFormats.StringFormat)) return;
-        string draggedId = (string)e.Data.GetData(DataFormats.StringFormat);
-        var dragged = _config.Items.FirstOrDefault(i => i.Id == draggedId);
-        if (dragged == null) return;
+        var draggedIds = ((string)e.Data.GetData(DataFormats.StringFormat))
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        var draggedItems = _config.Items.Where(i => draggedIds.Contains(i.Id)).ToList();
+        if (draggedItems.Count == 0) return;
 
         var targetElem = e.OriginalSource as DependencyObject;
         while (targetElem != null && targetElem is not ListBoxItem)
             targetElem = VisualTreeHelper.GetParent(targetElem);
 
-        if (targetElem is ListBoxItem targetLbi && targetLbi.Tag is string targetId && targetId != draggedId)
+        if (targetElem is ListBoxItem targetLbi && targetLbi.Tag is string targetId && !draggedIds.Contains(targetId))
         {
             var target = _config.Items.FirstOrDefault(i => i.Id == targetId);
             if (target == null) return;
 
-            _config.Items.Remove(dragged);
+            string newParent = target.Kind == "category" ? target.Id : target.ParentId;
+            foreach (var d in draggedItems) _config.Items.Remove(d);
             int targetIdx = _config.Items.IndexOf(target);
-            dragged.ParentId = target.Kind == "category" ? target.Id : target.ParentId;
-            _config.Items.Insert(targetIdx, dragged);
-            SaveConfigWithFeedback("Reordered menu");
+            if (target.Kind == "category") targetIdx++;
+            foreach (var d in draggedItems)
+            {
+                if (d.Id != newParent) d.ParentId = newParent;
+                _config.Items.Insert(targetIdx++, d);
+            }
+            SaveConfigWithFeedback($"Moved {draggedItems.Count} item(s)");
             RefreshDesignerList();
         }
     }
@@ -479,65 +490,85 @@ public partial class MainWindow : Window
 
     private void DesignerMoveUp_Click(object sender, RoutedEventArgs e)
     {
-        var sel = GetSelectedDesignerItem();
-        if (sel == null) return;
-        int idx = _config.Items.IndexOf(sel);
-        if (idx > 0)
+        var selected = GetSelectedDesignerItems();
+        if (selected.Count == 0) return;
+        bool moved = false;
+        foreach (var sel in selected)
         {
-            _config.Items.RemoveAt(idx);
-            _config.Items.Insert(idx - 1, sel);
-            SaveConfigWithFeedback("Moved up");
+            int idx = _config.Items.IndexOf(sel);
+            if (idx > 0 && !selected.Contains(_config.Items[idx - 1]))
+            {
+                _config.Items.RemoveAt(idx);
+                _config.Items.Insert(idx - 1, sel);
+                moved = true;
+            }
+        }
+        if (moved)
+        {
+            SaveConfigWithFeedback($"Moved {selected.Count} item(s) up");
             RefreshDesignerList();
         }
     }
 
     private void DesignerMoveDown_Click(object sender, RoutedEventArgs e)
     {
-        var sel = GetSelectedDesignerItem();
-        if (sel == null) return;
-        int idx = _config.Items.IndexOf(sel);
-        if (idx >= 0 && idx < _config.Items.Count - 1)
+        var selected = GetSelectedDesignerItems();
+        if (selected.Count == 0) return;
+        bool moved = false;
+        for (int i = selected.Count - 1; i >= 0; i--)
         {
-            _config.Items.RemoveAt(idx);
-            _config.Items.Insert(idx + 1, sel);
-            SaveConfigWithFeedback("Moved down");
+            var sel = selected[i];
+            int idx = _config.Items.IndexOf(sel);
+            if (idx >= 0 && idx < _config.Items.Count - 1 && !selected.Contains(_config.Items[idx + 1]))
+            {
+                _config.Items.RemoveAt(idx);
+                _config.Items.Insert(idx + 1, sel);
+                moved = true;
+            }
+        }
+        if (moved)
+        {
+            SaveConfigWithFeedback($"Moved {selected.Count} item(s) down");
             RefreshDesignerList();
         }
     }
 
     private void DesignerNest_Click(object sender, RoutedEventArgs e)
     {
-        var sel = GetSelectedDesignerItem();
-        if (sel == null) return;
-        var categories = _config.Items.Where(i => i.Kind == "category" && i.Id != sel.Id).ToList();
+        var selected = GetSelectedDesignerItems();
+        if (selected.Count == 0) return;
+        var categories = _config.Items.Where(i => i.Kind == "category" && !selected.Contains(i)).ToList();
         if (categories.Count == 0)
         {
             DarkDialog.ShowInfo(this, "No Categories", "Create a category first using '+ Add Category'.");
             return;
         }
-        // Nest into the nearest preceding category or the first available category
-        int idx = _config.Items.IndexOf(sel);
-        var targetCat = _config.Items.Take(idx).LastOrDefault(i => i.Kind == "category" && i.Id != sel.Id) ?? categories[0];
-        sel.ParentId = targetCat.Id;
-        SaveConfigWithFeedback($"Nested into '{targetCat.Title}'");
+        int firstIdx = _config.Items.IndexOf(selected[0]);
+        var targetCat = _config.Items.Take(firstIdx).LastOrDefault(i => i.Kind == "category" && !selected.Contains(i)) ?? categories[0];
+        foreach (var sel in selected)
+        {
+            if (sel.Id != targetCat.Id) sel.ParentId = targetCat.Id;
+        }
+        SaveConfigWithFeedback($"Nested {selected.Count} item(s) into '{targetCat.Title}'");
         RefreshDesignerList();
     }
 
     private void DesignerUnnest_Click(object sender, RoutedEventArgs e)
     {
-        var sel = GetSelectedDesignerItem();
-        if (sel == null) return;
-        sel.ParentId = "";
-        SaveConfigWithFeedback("Moved to root");
+        var selected = GetSelectedDesignerItems();
+        if (selected.Count == 0) return;
+        foreach (var sel in selected) sel.ParentId = "";
+        SaveConfigWithFeedback($"Moved {selected.Count} item(s) to root");
         RefreshDesignerList();
     }
 
     private void DesignerToggleEnabled_Click(object sender, RoutedEventArgs e)
     {
-        var sel = GetSelectedDesignerItem();
-        if (sel == null) return;
-        sel.Enabled = !sel.Enabled;
-        SaveConfigWithFeedback(sel.Enabled ? "Enabled item" : "Disabled item");
+        var selected = GetSelectedDesignerItems();
+        if (selected.Count == 0) return;
+        bool targetState = !selected.All(s => s.Enabled);
+        foreach (var sel in selected) sel.Enabled = targetState;
+        SaveConfigWithFeedback($"{(targetState ? "Enabled" : "Disabled")} {selected.Count} item(s)");
         RefreshDesignerList();
         RefreshBuiltInCommands();
     }
@@ -546,40 +577,53 @@ public partial class MainWindow : Window
 
     private void DesignerList_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        var sel = GetSelectedDesignerItem();
+        var selected = GetSelectedDesignerItems().Where(s => s.Kind != "separator").ToList();
         if (DesignerModifierCombo == null) return;
         _updatingDesignerModifier = true;
-        DesignerModifierCombo.IsEnabled = sel != null && sel.Kind != "separator";
-        SelectComboByTag(DesignerModifierCombo, sel?.Rules.ModifierKey ?? "none");
+        DesignerModifierCombo.IsEnabled = selected.Count > 0;
+        SelectComboByTag(DesignerModifierCombo, selected.FirstOrDefault()?.Rules.ModifierKey ?? "none");
         _updatingDesignerModifier = false;
     }
 
     private void DesignerModifier_Changed(object sender, SelectionChangedEventArgs e)
     {
         if (_updatingDesignerModifier) return;
-        var sel = GetSelectedDesignerItem();
-        if (sel == null || sel.Kind == "separator") return;
+        var selected = GetSelectedDesignerItems().Where(s => s.Kind != "separator").ToList();
+        if (selected.Count == 0) return;
         string mod = GetSelectedComboTag(DesignerModifierCombo, "none");
-        if (sel.Rules.ModifierKey == mod) return;
-        sel.Rules.ModifierKey = mod;
-        SaveConfigWithFeedback($"Updated modifier for '{sel.Title}'");
+        bool changed = false;
+        foreach (var sel in selected)
+        {
+            if (sel.Rules.ModifierKey != mod)
+            {
+                sel.Rules.ModifierKey = mod;
+                changed = true;
+            }
+        }
+        if (!changed) return;
+        SaveConfigWithFeedback($"Updated modifier for {selected.Count} item(s)");
         RefreshDesignerList();
         RefreshBuiltInCommands();
     }
 
     private void DesignerDelete_Click(object sender, RoutedEventArgs e)
     {
-        var sel = GetSelectedDesignerItem();
-        if (sel == null) return;
-        if (sel.BuiltIn && sel.Kind == "command")
+        var selected = GetSelectedDesignerItems();
+        if (selected.Count == 0) return;
+        var deletable = selected.Where(s => !(s.BuiltIn && s.Kind == "command")).ToList();
+        if (deletable.Count == 0)
         {
             DarkDialog.ShowInfo(this, "Built-in Command", "Built-in commands cannot be deleted; use 'Toggle Enabled' to hide them.");
             return;
         }
-        if (!DarkDialog.Confirm(this, "Delete Item", $"Delete '{sel.Title}'? Any nested items will be moved to root.")) return;
-        foreach (var child in _config.Items.Where(i => i.ParentId == sel.Id)) child.ParentId = "";
-        _config.Items.Remove(sel);
-        SaveConfigWithFeedback("Deleted item");
+        string label = deletable.Count == 1 ? $"'{deletable[0].Title}'" : $"{deletable.Count} selected items";
+        if (!DarkDialog.Confirm(this, "Delete Items", $"Delete {label}? Any nested items will be moved to root.")) return;
+        foreach (var sel in deletable)
+        {
+            foreach (var child in _config.Items.Where(i => i.ParentId == sel.Id)) child.ParentId = "";
+            _config.Items.Remove(sel);
+        }
+        SaveConfigWithFeedback($"Deleted {deletable.Count} item(s)");
         RefreshDesignerList();
         RefreshCustomCommandsList();
     }
@@ -624,16 +668,17 @@ public partial class MainWindow : Window
             };
         }
 
+        bool isSingle = _config.Appearance.ModernSubmenuMode is "single" or "flatten";
         var header = new TextBlock
         {
-            Text = $"{_config.Appearance.RootMenuTitle}  \u25B8",
+            Text = isSingle ? $"{_config.Appearance.RootMenuTitle}  \u25B8" : "Windows 11 Root Context Menu",
             FontWeight = FontWeights.SemiBold,
             Foreground = (Brush)FindResource("AccentBrush"),
             Margin = new Thickness(6, 4, 6, 8)
         };
         LivePreviewPanel.Children.Add(header);
 
-        bool flatten = _config.Appearance.ModernSubmenuMode == "flatten";
+        bool flatten = isSingle;
         var topItems = _config.Items.Where(i => i.Enabled && string.IsNullOrEmpty(i.ParentId)).OrderBy(i => i.Order).ToList();
 
         void AddPreviewRow(string text, bool isCategory, int indent = 0)
@@ -927,7 +972,7 @@ public partial class MainWindow : Window
     {
         _config.Appearance.RootMenuTitle = string.IsNullOrWhiteSpace(AppRootTitleBox.Text) ? "xMenuForge" : AppRootTitleBox.Text.Trim();
         _config.Appearance.IconTheme = GetSelectedComboTag(AppIconThemeCombo, "auto");
-        _config.Appearance.ModernSubmenuMode = GetSelectedComboTag(AppSubmenuModeCombo, "flyout");
+        _config.Appearance.ModernSubmenuMode = GetSelectedComboTag(AppSubmenuModeCombo, "direct");
         _config.Appearance.ShowIcons = AppShowIconsChk.IsChecked == true;
         SaveConfigWithFeedback("Saved appearance settings");
     }

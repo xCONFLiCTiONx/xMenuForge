@@ -230,8 +230,8 @@
 
                             <Border Grid.Column="0" Style="{StaticResource CardBorder}" Padding="10">
                                 <DockPanel>
-                                    <TextBlock DockPanel.Dock="Top" Text="Menu Hierarchy (drag to reorder)" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource TextSecondaryBrush}" Margin="4,0,0,8"/>
-                                    <ListBox x:Name="DesignerList" AllowDrop="True"
+                                    <TextBlock DockPanel.Dock="Top" Text="Menu Hierarchy (Shift+Click / Ctrl+Click to multi-select, drag to reorder)" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource TextSecondaryBrush}" Margin="4,0,0,8"/>
+                                    <ListBox x:Name="DesignerList" AllowDrop="True" SelectionMode="Extended"
                                              SelectionChanged="DesignerList_SelectionChanged"
                                              PreviewMouseLeftButtonDown="DesignerList_PreviewMouseLeftButtonDown"
                                              PreviewMouseMove="DesignerList_PreviewMouseMove"
@@ -536,10 +536,10 @@
                                             <ColumnDefinition Width="240"/>
                                             <ColumnDefinition Width="320"/>
                                         </Grid.ColumnDefinitions>
-                                        <TextBlock Text="Modern Win11 Category Mode" VerticalAlignment="Center" Foreground="{StaticResource TextSecondaryBrush}"/>
+                                        <TextBlock Text="Modern Win11 Menu Placement" VerticalAlignment="Center" Foreground="{StaticResource TextSecondaryBrush}"/>
                                         <ComboBox x:Name="AppSubmenuModeCombo" Grid.Column="1">
-                                            <ComboBoxItem Content="Category Flyout (Cursor Popup for Nested Menus)" Tag="flyout"/>
-                                            <ComboBoxItem Content="Flatten with Visual Separators" Tag="flatten"/>
+                                            <ComboBoxItem Content="Direct Root (Native Win11 Submenus)" Tag="direct"/>
+                                            <ComboBoxItem Content="Single 'xMenuForge' Root (Flat + Separators)" Tag="single"/>
                                         </ComboBox>
                                     </Grid>
                                     <CheckBox x:Name="AppShowIconsChk" Style="{StaticResource ToggleSwitch}" Content="Show icons beside context menu commands"/>

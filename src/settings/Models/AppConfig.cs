@@ -35,7 +35,7 @@ public sealed class AppearanceConfig
     public string IconTheme { get; set; } = "auto"; // auto | dark | light
 
     [JsonPropertyName("modernSubmenuMode")]
-    public string ModernSubmenuMode { get; set; } = "flyout"; // flyout | flatten
+    public string ModernSubmenuMode { get; set; } = "direct"; // direct | single
 
     [JsonPropertyName("windowMaximized")]
     public bool WindowMaximized { get; set; } = false;

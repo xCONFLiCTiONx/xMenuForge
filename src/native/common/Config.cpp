@@ -422,7 +422,7 @@ static AppConfig DeserializeConfig(const json::Value& root) {
         cfg.appearance.rootMenuIcon = Utf8ToWide(a.Get("rootMenuIcon").AsStringOr("Icons\\ICON.ico"));
         cfg.appearance.showIcons = a.Get("showIcons").AsBool(true);
         cfg.appearance.iconTheme = Utf8ToWide(a.Get("iconTheme").AsStringOr("auto"));
-        cfg.appearance.modernSubmenuMode = Utf8ToWide(a.Get("modernSubmenuMode").AsStringOr("flyout"));
+        cfg.appearance.modernSubmenuMode = Utf8ToWide(a.Get("modernSubmenuMode").AsStringOr("direct"));
         cfg.appearance.windowMaximized = a.Get("windowMaximized").AsBool(false);
     }
 

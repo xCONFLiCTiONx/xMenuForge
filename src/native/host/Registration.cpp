@@ -4,15 +4,34 @@
 #include <windows.h>
 #include <shlwapi.h>
 #include <filesystem>
+#include <fstream>
+#include <sstream>
 #include <vector>
 
 namespace fs = std::filesystem;
 
 namespace xmf::reg {
 
+static constexpr int kSlotCount = 12;
 static constexpr const wchar_t* kPackageName = L"xCONFLiCTiONx.xMenuForge";
 static constexpr const wchar_t* kModernClsid = L"{7A4E9C10-5B2D-4F81-A310-9C6E2B410001}";
 static constexpr const wchar_t* kClassicClsid = L"{7A4E9C10-5B2D-4F81-A310-9C6E2B410002}";
+
+static std::wstring GetSlotClsidNoBraces(int slot) {
+    if (slot == 0) return L"7A4E9C10-5B2D-4F81-A310-9C6E2B410001";
+    wchar_t buf[64]{};
+    swprintf_s(buf, L"7A4E9C10-5B2D-4F81-A310-9C6E2B4100%02X", 0x10 + slot);
+    return buf;
+}
+
+static std::wstring GetSlotClsid(int slot) {
+    return L"{" + GetSlotClsidNoBraces(slot) + L"}";
+}
+
+static std::wstring GetSlotPackageName(int slot) {
+    if (slot == 0) return kPackageName;
+    return std::wstring(kPackageName) + L".Slot" + std::to_wstring(slot);
+}
 
 static bool SetHkcuString(const std::wstring& subKey, const std::wstring& valueName, const std::wstring& data) {
     HKEY hKey = nullptr;
@@ -49,7 +68,7 @@ static void DeleteHkcuTree(const std::wstring& subKey) {
     RegDeleteTreeW(HKEY_CURRENT_USER, subKey.c_str());
 }
 
-static bool RunPowerShell(const std::wstring& script, std::wstring& outText, DWORD timeoutMs = 45000) {
+static bool RunPowerShell(const std::wstring& script, std::wstring& outText, DWORD timeoutMs = 90000) {
     std::wstring cmd = L"powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command \"" + script + L"\"";
     SECURITY_ATTRIBUTES sa{sizeof(sa), nullptr, TRUE};
     HANDLE hRead = nullptr, hWrite = nullptr;
@@ -112,6 +131,70 @@ static bool RunPowerShell(const std::wstring& script, std::wstring& outText, DWO
     return exitCode == 0;
 }
 
+static bool WriteSlotManifest(const fs::path& manifestPath, int slot) {
+    std::string pkgName = WideToUtf8(GetSlotPackageName(slot));
+    std::string clsid = WideToUtf8(GetSlotClsidNoBraces(slot));
+    std::string appId = "xMenuForgeSlot" + std::to_string(slot);
+    std::string displayName = "xMenuForge Slot " + std::to_string(slot);
+
+    std::ostringstream xml;
+    xml << "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
+        << "<Package\n"
+        << "  xmlns=\"http://schemas.microsoft.com/appx/manifest/foundation/windows10\"\n"
+        << "  xmlns:uap=\"http://schemas.microsoft.com/appx/manifest/uap/windows10\"\n"
+        << "  xmlns:uap10=\"http://schemas.microsoft.com/appx/manifest/uap/windows10/10\"\n"
+        << "  xmlns:rescap=\"http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities\"\n"
+        << "  xmlns:desktop4=\"http://schemas.microsoft.com/appx/manifest/desktop/windows10/4\"\n"
+        << "  xmlns:desktop5=\"http://schemas.microsoft.com/appx/manifest/desktop/windows10/5\"\n"
+        << "  xmlns:desktop6=\"http://schemas.microsoft.com/appx/manifest/desktop/windows10/6\"\n"
+        << "  xmlns:com=\"http://schemas.microsoft.com/appx/manifest/com/windows10\"\n"
+        << "  IgnorableNamespaces=\"uap uap10 rescap desktop4 desktop5 desktop6 com\">\n"
+        << "  <Identity Name=\"" << pkgName << "\" Publisher=\"CN=xCONFLiCTiONx\" Version=\"1.0.0.0\" />\n"
+        << "  <Properties>\n"
+        << "    <DisplayName>" << displayName << "</DisplayName>\n"
+        << "    <PublisherDisplayName>xCONFLiCTiONx</PublisherDisplayName>\n"
+        << "    <Logo>Assets\\StoreLogo.png</Logo>\n"
+        << "    <uap10:AllowExternalContent>true</uap10:AllowExternalContent>\n"
+        << "    <desktop6:RegistryWriteVirtualization>disabled</desktop6:RegistryWriteVirtualization>\n"
+        << "    <desktop6:FileSystemWriteVirtualization>disabled</desktop6:FileSystemWriteVirtualization>\n"
+        << "  </Properties>\n"
+        << "  <Dependencies>\n"
+        << "    <TargetDeviceFamily Name=\"Windows.Desktop\" MinVersion=\"10.0.19041.0\" MaxVersionTested=\"10.0.26100.0\" />\n"
+        << "  </Dependencies>\n"
+        << "  <Capabilities>\n"
+        << "    <rescap:Capability Name=\"runFullTrust\" />\n"
+        << "    <rescap:Capability Name=\"unvirtualizedResources\" />\n"
+        << "  </Capabilities>\n"
+        << "  <Applications>\n"
+        << "    <Application Id=\"" << appId << "\" Executable=\"xMenuForge.Host.exe\" EntryPoint=\"Windows.FullTrustApplication\">\n"
+        << "      <uap:VisualElements DisplayName=\"" << displayName << "\" Description=\"xMenuForge context menu slot\" BackgroundColor=\"#0E1015\" Square150x150Logo=\"Assets\\StoreLogo.png\" Square44x44Logo=\"Assets\\Square44x44Logo.png\" AppListEntry=\"none\" />\n"
+        << "      <Extensions>\n"
+        << "        <com:Extension Category=\"windows.comServer\">\n"
+        << "          <com:ComServer>\n"
+        << "            <com:SurrogateServer>\n"
+        << "              <com:Class Id=\"" << clsid << "\" Path=\"xMenuForge.Shell.dll\" ThreadingModel=\"STA\" />\n"
+        << "            </com:SurrogateServer>\n"
+        << "          </com:ComServer>\n"
+        << "        </com:Extension>\n"
+        << "        <desktop4:Extension Category=\"windows.fileExplorerContextMenus\">\n"
+        << "          <desktop4:FileExplorerContextMenus>\n"
+        << "            <desktop5:ItemType Type=\"*\"><desktop5:Verb Id=\"xmfFiles" << slot << "\" Clsid=\"" << clsid << "\" /></desktop5:ItemType>\n"
+        << "            <desktop5:ItemType Type=\"Directory\"><desktop5:Verb Id=\"xmfDir" << slot << "\" Clsid=\"" << clsid << "\" /></desktop5:ItemType>\n"
+        << "            <desktop5:ItemType Type=\"Directory\\Background\"><desktop5:Verb Id=\"xmfBg" << slot << "\" Clsid=\"" << clsid << "\" /></desktop5:ItemType>\n"
+        << "          </desktop4:FileExplorerContextMenus>\n"
+        << "        </desktop4:Extension>\n"
+        << "      </Extensions>\n"
+        << "    </Application>\n"
+        << "  </Applications>\n"
+        << "</Package>\n";
+
+    std::ofstream ofs(manifestPath, std::ios::binary | std::ios::trunc);
+    if (!ofs.is_open()) return false;
+    std::string content = xml.str();
+    ofs.write(content.data(), static_cast<std::streamsize>(content.size()));
+    return ofs.good();
+}
+
 RegistrationStatus QueryStatus(const std::wstring& installDir) {
     RegistrationStatus st;
     fs::path dir(installDir);
@@ -156,10 +239,12 @@ bool RegisterAll(const std::wstring& installDir, bool enableClassic, bool restar
         aclOut,
         15000);
 
-    // 1. Register HKCU COM InprocServer32 for Modern IExplorerCommand
-    std::wstring modernKey = std::wstring(L"Software\\Classes\\CLSID\\") + kModernClsid + L"\\InprocServer32";
-    SetHkcuString(modernKey, L"", dllPath.wstring());
-    SetHkcuString(modernKey, L"ThreadingModel", L"Apartment");
+    // 1. Register HKCU COM InprocServer32 for all 12 Modern IExplorerCommand slots
+    for (int slot = 0; slot < kSlotCount; ++slot) {
+        std::wstring key = L"Software\\Classes\\CLSID\\" + GetSlotClsid(slot) + L"\\InprocServer32";
+        SetHkcuString(key, L"", dllPath.wstring());
+        SetHkcuString(key, L"ThreadingModel", L"Apartment");
+    }
 
     // 2. Classic COM + ContextMenuHandlers (only if enabled; otherwise clean up)
     std::wstring classicKey = std::wstring(L"Software\\Classes\\CLSID\\") + kClassicClsid;
@@ -176,27 +261,46 @@ bool RegisterAll(const std::wstring& installDir, bool enableClassic, bool restar
         DeleteHkcuTree(L"Software\\Classes\\Directory\\Background\\shellex\\ContextMenuHandlers\\xMenuForge");
     }
 
-    // 3. Register Sparse Package for Windows 11 Modern Context Menu
+    // 3. Generate per-slot Sparse Package manifests in <installDir>\Slots\Slot<N>\AppxManifest.xml
+    //    and register all 12 native Win11 top-level slots in a single PowerShell call!
+    fs::path slotsRoot = dir / L"Slots";
+    std::error_code ec;
+    fs::create_directories(slotsRoot, ec);
+
+    std::wostringstream ps;
+    ps << L"$ProgressPreference='SilentlyContinue'; "
+       << L"Restart-Service AppXSvc -Force -ErrorAction SilentlyContinue; "
+       << L"Get-AppxPackage -Name 'xCONFLiCTiONx.xMenuForge*' -ErrorAction SilentlyContinue | Remove-AppxPackage -ErrorAction SilentlyContinue; "
+       << L"Add-AppxPackage -Register -ForceUpdateFromAnyVersion -Path '" << manifestPath.wstring() << L"' -ExternalLocation '" << dir.wstring() << L"'; ";
+
+    for (int slot = 1; slot < kSlotCount; ++slot) {
+        fs::path slotDir = slotsRoot / (L"Slot" + std::to_wstring(slot));
+        fs::create_directories(slotDir, ec);
+        fs::path slotManifest = slotDir / L"AppxManifest.xml";
+        if (WriteSlotManifest(slotManifest, slot)) {
+            ps << L"Add-AppxPackage -Register -ForceUpdateFromAnyVersion -Path '" << slotManifest.wstring()
+               << L"' -ExternalLocation '" << dir.wstring() << L"'; ";
+        }
+    }
+
     std::wstring psOut;
-    std::wstring script =
-        L"$ProgressPreference='SilentlyContinue'; "
-        L"Restart-Service AppXSvc -Force -ErrorAction SilentlyContinue; "
-        L"Get-AppxPackage -Name '" + std::wstring(kPackageName) + L"' -ErrorAction SilentlyContinue | Remove-AppxPackage -ErrorAction SilentlyContinue; "
-        L"Add-AppxPackage -Register -ForceUpdateFromAnyVersion -Path '" + manifestPath.wstring() + L"' -ExternalLocation '" + dir.wstring() + L"'";
-    bool ok = RunPowerShell(script, psOut);
+    bool ok = RunPowerShell(ps.str(), psOut, 90000);
     if (!ok) {
         outMessage = L"Sparse package registration failed: " + psOut;
         AppendDiagnosticLog(L"ERROR", outMessage);
         return false;
     }
 
-    // 4. Enable xMenuForge in Windows 11 26H2+ Explorer ContextMenu Preferences
-    // (When ShowExtensions=0, Windows hides new packaged extensions until enabled here)
+    // 4. Enable all xMenuForge slot packages in Windows 11 26H2+ Explorer ContextMenu Preferences
     std::wstring pfnOut;
-    if (RunPowerShell(L"$p = Get-AppxPackage -Name '" + std::wstring(kPackageName) + L"' -ErrorAction SilentlyContinue; if ($p) { Write-Output $p.PackageFamilyName }", pfnOut, 15000)) {
-        while (!pfnOut.empty() && (pfnOut.back() == L'\r' || pfnOut.back() == L'\n' || pfnOut.back() == L' ')) pfnOut.pop_back();
-        if (!pfnOut.empty()) {
-            SetHkcuDword(L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\ContextMenu\\Preferences\\extensions\\" + pfnOut, L"Enabled", 1);
+    if (RunPowerShell(L"Get-AppxPackage -Name 'xCONFLiCTiONx.xMenuForge*' -ErrorAction SilentlyContinue | ForEach-Object { Write-Output $_.PackageFamilyName }", pfnOut, 15000)) {
+        std::wistringstream iss(pfnOut);
+        std::wstring line;
+        while (std::getline(iss, line)) {
+            while (!line.empty() && (line.back() == L'\r' || line.back() == L'\n' || line.back() == L' ')) line.pop_back();
+            if (!line.empty()) {
+                SetHkcuDword(L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\ContextMenu\\Preferences\\extensions\\" + line, L"Enabled", 1);
+            }
         }
     }
 
@@ -205,24 +309,38 @@ bool RegisterAll(const std::wstring& installDir, bool enableClassic, bool restar
         RunPowerShell(L"Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue; Start-Sleep -Milliseconds 600; if (-not (Get-Process explorer -ErrorAction SilentlyContinue)) { Start-Process explorer.exe }", expOut, 15000);
     }
 
-    outMessage = L"xMenuForge Explorer integration registered successfully.";
+    outMessage = L"xMenuForge Explorer integration (12 native Windows 11 top-level slots) registered successfully.";
     AppendDiagnosticLog(L"INFO", outMessage);
     return true;
 }
 
 bool UnregisterAll(bool restartExplorer, std::wstring& outMessage) {
+    // Clean up all Windows 11 26H2 ContextMenu preferences for xMenuForge slots
+    std::wstring pfnOut;
+    if (RunPowerShell(L"Get-AppxPackage -Name 'xCONFLiCTiONx.xMenuForge*' -ErrorAction SilentlyContinue | ForEach-Object { Write-Output $_.PackageFamilyName }", pfnOut, 15000)) {
+        std::wistringstream iss(pfnOut);
+        std::wstring line;
+        while (std::getline(iss, line)) {
+            while (!line.empty() && (line.back() == L'\r' || line.back() == L'\n' || line.back() == L' ')) line.pop_back();
+            if (!line.empty()) {
+                DeleteHkcuTree(L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\ContextMenu\\Preferences\\extensions\\" + line);
+            }
+        }
+    }
+
     std::wstring psOut;
     RunPowerShell(
         L"$ProgressPreference='SilentlyContinue'; "
-        L"Get-AppxPackage -Name '" + std::wstring(kPackageName) + L"' -ErrorAction SilentlyContinue | Remove-AppxPackage -ErrorAction SilentlyContinue",
-        psOut);
+        L"Get-AppxPackage -Name 'xCONFLiCTiONx.xMenuForge*' -ErrorAction SilentlyContinue | Remove-AppxPackage -ErrorAction SilentlyContinue",
+        psOut, 60000);
 
-    DeleteHkcuTree(std::wstring(L"Software\\Classes\\CLSID\\") + kModernClsid);
+    for (int slot = 0; slot < kSlotCount; ++slot) {
+        DeleteHkcuTree(L"Software\\Classes\\CLSID\\" + GetSlotClsid(slot));
+    }
     DeleteHkcuTree(std::wstring(L"Software\\Classes\\CLSID\\") + kClassicClsid);
     DeleteHkcuTree(L"Software\\Classes\\*\\shellex\\ContextMenuHandlers\\xMenuForge");
     DeleteHkcuTree(L"Software\\Classes\\Directory\\shellex\\ContextMenuHandlers\\xMenuForge");
     DeleteHkcuTree(L"Software\\Classes\\Directory\\Background\\shellex\\ContextMenuHandlers\\xMenuForge");
-    DeleteHkcuTree(L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\ContextMenu\\Preferences\\extensions\\xCONFLiCTiONx.xMenuForge_hex857hc9nqtm");
 
     if (restartExplorer) {
         std::wstring expOut;

@@ -4,6 +4,7 @@
 #include <shobjidl.h>
 #include <shellapi.h>
 
+#include <algorithm>
 #include <atomic>
 #include <filesystem>
 #include <fstream>
@@ -22,13 +23,33 @@
 
 namespace {
 
-// {7A4E9C10-5B2D-4F81-A310-9C6E2B410001}
+// Primary Slot 0: {7A4E9C10-5B2D-4F81-A310-9C6E2B410001}
+// Additional Native Top-Level Slots 1..11: {7A4E9C10-5B2D-4F81-A310-9C6E2B410011} .. 001B
+constexpr int kMaxRootSlots = 12;
+
 constexpr CLSID CLSID_XMenuForgeRoot =
     {0x7a4e9c10, 0x5b2d, 0x4f81, {0xa3, 0x10, 0x9c, 0x6e, 0x2b, 0x41, 0x00, 0x01}};
 
-// {7A4E9C10-5B2D-4F81-A310-9C6E2B410002}
+// Classic Context Menu: {7A4E9C10-5B2D-4F81-A310-9C6E2B410002}
 constexpr CLSID CLSID_XMenuForgeClassic =
     {0x7a4e9c10, 0x5b2d, 0x4f81, {0xa3, 0x10, 0x9c, 0x6e, 0x2b, 0x41, 0x00, 0x02}};
+
+int MatchSlotClsid(REFCLSID clsid) {
+    if (clsid == CLSID_XMenuForgeRoot) return 0;
+    for (int slot = 1; slot < kMaxRootSlots; ++slot) {
+        CLSID c = CLSID_XMenuForgeRoot;
+        c.Data4[7] = static_cast<unsigned char>(0x10 + slot); // 0x11 .. 0x1B
+        if (clsid == c) return slot;
+    }
+    return -1;
+}
+
+CLSID MakeSlotClsid(int slot) {
+    if (slot == 0) return CLSID_XMenuForgeRoot;
+    CLSID c = CLSID_XMenuForgeRoot;
+    c.Data4[7] = static_cast<unsigned char>(0x10 + slot);
+    return c;
+}
 
 HMODULE g_hModule = nullptr;
 std::atomic_ulong g_objects{0};
@@ -127,21 +148,11 @@ void LaunchHost(const std::wstring& modeFlag, const std::wstring& itemId, const 
     if (!targetsFile.empty()) {
         cmdLine += L" --targets-file \"" + targetsFile + L"\"";
     }
-    if (ctx.isBackground) {
-        cmdLine += L" --background";
-    }
-    if (ctx.isFolder) {
-        cmdLine += L" --folder";
-    }
-    if (ctx.ctrlHeld) {
-        cmdLine += L" --ctrl";
-    }
-    if (ctx.altHeld) {
-        cmdLine += L" --alt";
-    }
-    if (ctx.winHeld) {
-        cmdLine += L" --win";
-    }
+    if (ctx.isBackground) cmdLine += L" --background";
+    if (ctx.isFolder) cmdLine += L" --folder";
+    if (ctx.ctrlHeld) cmdLine += L" --ctrl";
+    if (ctx.altHeld) cmdLine += L" --alt";
+    if (ctx.winHeld) cmdLine += L" --win";
 
     POINT pt{};
     if (GetCursorPos(&pt)) {
@@ -174,11 +185,6 @@ void LaunchHost(const std::wstring& modeFlag, const std::wstring& itemId, const 
     }
 }
 
-// ============================================================================
-// Modern Windows 11 Context Menu (IExplorerCommand)
-// Strictly adheres to Microsoft Learn docs: 1 submenu level (no recursive EnumSubCommands).
-// ============================================================================
-
 struct ModifierSnapshot {
     bool ctrl = false;
     bool alt = false;
@@ -203,12 +209,18 @@ struct ModifierSnapshot {
     }
 };
 
+// ============================================================================
+// Modern Windows 11 Context Menu (IExplorerCommand)
+// Multi-slot native top-level architecture:
+//   Each top-level command or category gets its own native Win11 root slot,
+//   so every category renders as a 100% native Windows 11 Fluent cascading submenu!
+// ============================================================================
+
 struct LeafSpec {
     std::wstring id;
     std::wstring title;
     std::wstring iconPath;
     std::wstring tooltip;
-    bool isCategoryFlyout = false;
     bool separatorBefore = false;
     xmf::MenuItem itemCopy;
     ModifierSnapshot modifiers;
@@ -276,22 +288,13 @@ public:
         if (!state) return E_POINTER;
         xmf::SelectionContext ctx = ExtractContext(items, site_);
         spec_.modifiers.ApplyTo(ctx);
-        if (spec_.isCategoryFlyout) {
-            bool visible = xmf::MatchesContext(spec_.itemCopy, ctx) && xmf::HasAnyVisibleCommand(config_, spec_.id, ctx);
-            *state = visible ? ECS_ENABLED : ECS_HIDDEN;
-        } else {
-            *state = xmf::MatchesContext(spec_.itemCopy, ctx) ? ECS_ENABLED : ECS_HIDDEN;
-        }
+        *state = xmf::MatchesContext(spec_.itemCopy, ctx) ? ECS_ENABLED : ECS_HIDDEN;
         return S_OK;
     }
     IFACEMETHODIMP Invoke(IShellItemArray* items, IBindCtx*) override {
         xmf::SelectionContext ctx = ExtractContext(items, site_);
         spec_.modifiers.ApplyTo(ctx);
-        if (spec_.isCategoryFlyout) {
-            LaunchHost(L"--flyout", spec_.id, ctx);
-        } else {
-            LaunchHost(L"--invoke", spec_.id, ctx);
-        }
+        LaunchHost(L"--invoke", spec_.id, ctx);
         return S_OK;
     }
     IFACEMETHODIMP GetFlags(EXPCMDFLAGS* flags) override {
@@ -305,7 +308,6 @@ public:
         return E_NOTIMPL;
     }
 
-    // IObjectWithSite
     IFACEMETHODIMP SetSite(IUnknown* pUnkSite) override {
         if (site_) site_->Release();
         site_ = pUnkSite;
@@ -393,10 +395,13 @@ private:
     size_t index_ = 0;
 };
 
-class RootCommand final : public IExplorerCommand, public IObjectWithSite {
+class SlotCommand final : public IExplorerCommand, public IObjectWithSite {
 public:
-    RootCommand() : modifiers_(ModifierSnapshot::Capture()) { ++g_objects; }
-    ~RootCommand() {
+    explicit SlotCommand(int slotIndex)
+        : slotIndex_(slotIndex), modifiers_(ModifierSnapshot::Capture()) {
+        ++g_objects;
+    }
+    ~SlotCommand() {
         if (site_) site_->Release();
         --g_objects;
     }
@@ -425,78 +430,151 @@ public:
 
     IFACEMETHODIMP GetTitle(IShellItemArray*, LPWSTR* name) override {
         if (!name) return E_POINTER;
-        EnsureConfigLoaded();
-        std::wstring title = config_.appearance.rootMenuTitle.empty() ? L"xMenuForge" : config_.appearance.rootMenuTitle;
-        return SHStrDupW(title.c_str(), name);
+        EnsureLoaded();
+        if (IsSingleRootMode()) {
+            std::wstring title = config_.appearance.rootMenuTitle.empty() ? L"xMenuForge" : config_.appearance.rootMenuTitle;
+            return SHStrDupW(title.c_str(), name);
+        }
+        if (isOverflowSlot_) {
+            std::wstring title = config_.appearance.rootMenuTitle.empty() ? L"xMenuForge" : (config_.appearance.rootMenuTitle + L" More");
+            return SHStrDupW(title.c_str(), name);
+        }
+        if (boundItem_) {
+            return SHStrDupW(boundItem_->title.c_str(), name);
+        }
+        return SHStrDupW(L"xMenuForge", name);
     }
+
     IFACEMETHODIMP GetIcon(IShellItemArray*, LPWSTR* icon) override {
         if (!icon) return E_POINTER;
-        EnsureConfigLoaded();
+        EnsureLoaded();
         if (!config_.appearance.showIcons) {
             *icon = nullptr;
             return E_NOTIMPL;
         }
-        std::wstring resolved = xmf::ResolveIconPath(config_.appearance.rootMenuIcon, config_.appearance, g_hModule);
+        std::wstring spec = config_.appearance.rootMenuIcon;
+        if (!IsSingleRootMode() && !isOverflowSlot_ && boundItem_ && !boundItem_->icon.empty()) {
+            spec = boundItem_->icon;
+        }
+        std::wstring resolved = xmf::ResolveIconPath(spec, config_.appearance, g_hModule);
         if (resolved.empty()) {
             *icon = nullptr;
             return E_NOTIMPL;
         }
         return SHStrDupW(resolved.c_str(), icon);
     }
+
     IFACEMETHODIMP GetToolTip(IShellItemArray*, LPWSTR* tip) override {
         if (!tip) return E_POINTER;
-        return SHStrDupW(L"xMenuForge - Customizable Context Menu", tip);
+        EnsureLoaded();
+        if (!IsSingleRootMode() && !isOverflowSlot_ && boundItem_ && !boundItem_->description.empty()) {
+            return SHStrDupW(boundItem_->description.c_str(), tip);
+        }
+        return SHStrDupW(L"xMenuForge", tip);
     }
+
     IFACEMETHODIMP GetCanonicalName(GUID* guid) override {
         if (!guid) return E_POINTER;
-        *guid = CLSID_XMenuForgeRoot;
+        *guid = MakeSlotClsid(slotIndex_);
         return S_OK;
     }
+
     IFACEMETHODIMP GetState(IShellItemArray* items, BOOL, EXPCMDSTATE* state) override {
         if (!state) return E_POINTER;
-        EnsureConfigLoaded();
+        EnsureLoaded();
         if (!config_.integrations.modernContextMenuEnabled) {
             *state = ECS_HIDDEN;
             return S_OK;
         }
+
         xmf::SelectionContext ctx = ExtractContext(items, site_);
         modifiers_.ApplyTo(ctx);
-        *state = xmf::HasAnyVisibleCommand(config_, L"", ctx) ? ECS_ENABLED : ECS_HIDDEN;
+
+        if (IsSingleRootMode()) {
+            if (slotIndex_ != 0) {
+                *state = ECS_HIDDEN;
+                return S_OK;
+            }
+            *state = xmf::HasAnyVisibleCommand(config_, L"", ctx) ? ECS_ENABLED : ECS_HIDDEN;
+            return S_OK;
+        }
+
+        // Direct Root mode
+        if (isOverflowSlot_) {
+            bool any = false;
+            for (size_t i = kMaxRootSlots - 1; i < topItems_.size(); ++i) {
+                const auto* it = topItems_[i];
+                if (it->kind == xmf::ItemKind::Category) {
+                    if (xmf::MatchesContext(*it, ctx) && xmf::HasAnyVisibleCommand(config_, it->id, ctx)) {
+                        any = true;
+                        break;
+                    }
+                } else if (xmf::MatchesContext(*it, ctx)) {
+                    any = true;
+                    break;
+                }
+            }
+            *state = any ? ECS_ENABLED : ECS_HIDDEN;
+            return S_OK;
+        }
+
+        if (!boundItem_) {
+            *state = ECS_HIDDEN;
+            return S_OK;
+        }
+
+        if (boundItem_->kind == xmf::ItemKind::Category) {
+            bool vis = xmf::MatchesContext(*boundItem_, ctx) && xmf::HasAnyVisibleCommand(config_, boundItem_->id, ctx);
+            *state = vis ? ECS_ENABLED : ECS_HIDDEN;
+        } else {
+            *state = xmf::MatchesContext(*boundItem_, ctx) ? ECS_ENABLED : ECS_HIDDEN;
+        }
         return S_OK;
     }
-    IFACEMETHODIMP Invoke(IShellItemArray*, IBindCtx*) override { return S_OK; }
+
+    IFACEMETHODIMP Invoke(IShellItemArray* items, IBindCtx*) override {
+        EnsureLoaded();
+        if (!IsSingleRootMode() && !isOverflowSlot_ && boundItem_ && boundItem_->kind == xmf::ItemKind::Command) {
+            xmf::SelectionContext ctx = ExtractContext(items, site_);
+            modifiers_.ApplyTo(ctx);
+            LaunchHost(L"--invoke", boundItem_->id, ctx);
+        }
+        return S_OK;
+    }
+
     IFACEMETHODIMP GetFlags(EXPCMDFLAGS* flags) override {
         if (!flags) return E_POINTER;
-        *flags = ECF_HASSUBCOMMANDS;
+        EnsureLoaded();
+        if (IsSingleRootMode()) {
+            *flags = (slotIndex_ == 0) ? ECF_HASSUBCOMMANDS : ECF_DEFAULT;
+            return S_OK;
+        }
+        if (isOverflowSlot_) {
+            *flags = ECF_HASSUBCOMMANDS;
+            return S_OK;
+        }
+        if (boundItem_ && boundItem_->kind == xmf::ItemKind::Category) {
+            *flags = ECF_HASSUBCOMMANDS;
+            return S_OK;
+        }
+        *flags = ECF_DEFAULT;
         return S_OK;
     }
+
     IFACEMETHODIMP EnumSubCommands(IEnumExplorerCommand** commands) override {
         if (!commands) return E_POINTER;
         *commands = nullptr;
-        EnsureConfigLoaded();
-
-        // Collect top-level items in configured order
-        std::vector<const xmf::MenuItem*> topItems;
-        for (const auto& item : config_.items) {
-            if (item.enabled && item.parentId.empty()) {
-                topItems.push_back(&item);
-            }
-        }
-        std::stable_sort(topItems.begin(), topItems.end(), [](const xmf::MenuItem* a, const xmf::MenuItem* b) {
-            return a->order < b->order;
-        });
+        EnsureLoaded();
 
         std::vector<IExplorerCommand*> built;
         bool pendingSeparator = false;
-        bool flattenCategories = (config_.appearance.modernSubmenuMode == L"flatten");
 
-        auto pushLeaf = [&](const xmf::MenuItem& item, bool isCatFlyout, const std::wstring& prefix) {
+        auto pushLeaf = [&](const xmf::MenuItem& item, const std::wstring& prefix) {
             LeafSpec spec;
             spec.id = item.id;
-            spec.title = prefix + item.title + (isCatFlyout ? L"  \u25B8" : L"");
+            spec.title = prefix + item.title;
             spec.iconPath = xmf::ResolveIconPath(item.icon, config_.appearance, g_hModule);
             spec.tooltip = item.description;
-            spec.isCategoryFlyout = isCatFlyout;
             spec.separatorBefore = pendingSeparator && !built.empty();
             spec.itemCopy = item;
             spec.modifiers = modifiers_;
@@ -509,7 +587,7 @@ public:
             }
         };
 
-        auto flattenRec = [&](const std::wstring& parentId, const std::wstring& prefix, auto& self) -> void {
+        auto flattenChildren = [&](const std::wstring& parentId, const std::wstring& prefix, auto& self) -> void {
             std::vector<const xmf::MenuItem*> kids;
             for (const auto& it : config_.items) {
                 if (it.enabled && it.parentId == parentId) kids.push_back(&it);
@@ -525,25 +603,29 @@ public:
                     self(k->id, prefix + k->title + L" / ", self);
                     pendingSeparator = true;
                 } else {
-                    pushLeaf(*k, false, prefix);
+                    pushLeaf(*k, prefix);
                 }
             }
         };
 
-        for (const auto* item : topItems) {
-            if (item->kind == xmf::ItemKind::Separator) {
-                pendingSeparator = true;
-            } else if (item->kind == xmf::ItemKind::Category) {
-                if (flattenCategories) {
+        if (IsSingleRootMode()) {
+            if (slotIndex_ != 0) return E_NOTIMPL;
+            flattenChildren(L"", L"", flattenChildren);
+        } else if (isOverflowSlot_) {
+            for (size_t i = kMaxRootSlots - 1; i < topItems_.size(); ++i) {
+                const auto* it = topItems_[i];
+                if (it->kind == xmf::ItemKind::Category) {
                     pendingSeparator = true;
-                    flattenRec(item->id, L"", flattenRec);
+                    flattenChildren(it->id, it->title + L" / ", flattenChildren);
                     pendingSeparator = true;
                 } else {
-                    pushLeaf(*item, true, L"");
+                    pushLeaf(*it, L"");
                 }
-            } else {
-                pushLeaf(*item, false, L"");
             }
+        } else if (boundItem_ && boundItem_->kind == xmf::ItemKind::Category) {
+            flattenChildren(boundItem_->id, L"", flattenChildren);
+        } else {
+            return E_NOTIMPL;
         }
 
         auto* enumerator = new (std::nothrow) CommandEnumerator(std::move(built));
@@ -555,7 +637,6 @@ public:
         return S_OK;
     }
 
-    // IObjectWithSite
     IFACEMETHODIMP SetSite(IUnknown* pUnkSite) override {
         if (site_) site_->Release();
         site_ = pUnkSite;
@@ -569,17 +650,44 @@ public:
     }
 
 private:
-    void EnsureConfigLoaded() {
-        if (!configLoaded_) {
-            config_ = xmf::LoadConfig();
-            configLoaded_ = true;
+    bool IsSingleRootMode() const {
+        return config_.appearance.modernSubmenuMode == L"single" ||
+               config_.appearance.modernSubmenuMode == L"flatten";
+    }
+
+    void EnsureLoaded() {
+        if (loaded_) return;
+        config_ = xmf::LoadConfig();
+        loaded_ = true;
+
+        topItems_.clear();
+        for (const auto& it : config_.items) {
+            if (it.enabled && it.parentId.empty() && it.kind != xmf::ItemKind::Separator) {
+                topItems_.push_back(&it);
+            }
+        }
+        std::stable_sort(topItems_.begin(), topItems_.end(), [](const xmf::MenuItem* a, const xmf::MenuItem* b) {
+            return a->order < b->order;
+        });
+
+        if (topItems_.size() > static_cast<size_t>(kMaxRootSlots) && slotIndex_ == kMaxRootSlots - 1) {
+            isOverflowSlot_ = true;
+            boundItem_ = nullptr;
+        } else if (static_cast<size_t>(slotIndex_) < topItems_.size()) {
+            boundItem_ = topItems_[slotIndex_];
+        } else {
+            boundItem_ = nullptr;
         }
     }
 
     std::atomic_ulong refs_{1};
+    int slotIndex_ = 0;
     IUnknown* site_ = nullptr;
     xmf::AppConfig config_;
-    bool configLoaded_ = false;
+    bool loaded_ = false;
+    std::vector<const xmf::MenuItem*> topItems_;
+    const xmf::MenuItem* boundItem_ = nullptr;
+    bool isOverflowSlot_ = false;
     ModifierSnapshot modifiers_;
 };
 
@@ -667,7 +775,6 @@ public:
         return n;
     }
 
-    // IShellExtInit
     IFACEMETHODIMP Initialize(PCIDLIST_ABSOLUTE pidlFolder, IDataObject* pdtobj, HKEY) override {
         ctx_ = {};
         if (pdtobj) {
@@ -705,7 +812,6 @@ public:
         return S_OK;
     }
 
-    // IContextMenu
     IFACEMETHODIMP QueryContextMenu(HMENU hmenu, UINT indexMenu, UINT idCmdFirst, UINT idCmdLast, UINT uFlags) override {
         if (uFlags & CMF_DEFAULTONLY) return MAKE_HRESULT(SEVERITY_SUCCESS, FACILITY_NULL, 0);
 
@@ -785,7 +891,7 @@ private:
                 mii.wID = idCmdFirst + nextOffset++;
                 mii.hSubMenu = nested;
                 mii.dwTypeData = title.data();
-                commandIds_.push_back(L""); // placeholder slot
+                commandIds_.push_back(L"");
                 if (config_.appearance.showIcons) {
                     std::wstring iconPath = xmf::ResolveIconPath(item->icon, config_.appearance, g_hModule);
                     if (HBITMAP bmp = LoadMenuIconBitmap(iconPath)) {
@@ -830,7 +936,7 @@ private:
 
 class ClassFactory final : public IClassFactory {
 public:
-    explicit ClassFactory(bool classic) : classic_(classic) { ++g_objects; }
+    explicit ClassFactory(int slotIndex, bool classic) : slotIndex_(slotIndex), classic_(classic) { ++g_objects; }
     ~ClassFactory() { --g_objects; }
 
     IFACEMETHODIMP QueryInterface(REFIID riid, void** out) override {
@@ -858,13 +964,12 @@ public:
             HRESULT hr = obj->QueryInterface(riid, out);
             obj->Release();
             return hr;
-        } else {
-            auto* obj = new (std::nothrow) RootCommand();
-            if (!obj) return E_OUTOFMEMORY;
-            HRESULT hr = obj->QueryInterface(riid, out);
-            obj->Release();
-            return hr;
         }
+        auto* obj = new (std::nothrow) SlotCommand(slotIndex_);
+        if (!obj) return E_OUTOFMEMORY;
+        HRESULT hr = obj->QueryInterface(riid, out);
+        obj->Release();
+        return hr;
     }
     IFACEMETHODIMP LockServer(BOOL lock) override {
         if (lock) ++g_locks;
@@ -874,6 +979,7 @@ public:
 
 private:
     std::atomic_ulong refs_{1};
+    int slotIndex_;
     bool classic_;
 };
 
@@ -890,14 +996,22 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID) {
 STDAPI DllGetClassObject(REFCLSID rclsid, REFIID riid, void** ppv) {
     if (!ppv) return E_POINTER;
     *ppv = nullptr;
-    if (rclsid != CLSID_XMenuForgeRoot && rclsid != CLSID_XMenuForgeClassic) {
-        return CLASS_E_CLASSNOTAVAILABLE;
+    if (rclsid == CLSID_XMenuForgeClassic) {
+        auto* factory = new (std::nothrow) ClassFactory(-1, true);
+        if (!factory) return E_OUTOFMEMORY;
+        HRESULT hr = factory->QueryInterface(riid, ppv);
+        factory->Release();
+        return hr;
     }
-    auto* factory = new (std::nothrow) ClassFactory(rclsid == CLSID_XMenuForgeClassic);
-    if (!factory) return E_OUTOFMEMORY;
-    HRESULT hr = factory->QueryInterface(riid, ppv);
-    factory->Release();
-    return hr;
+    int slot = MatchSlotClsid(rclsid);
+    if (slot >= 0) {
+        auto* factory = new (std::nothrow) ClassFactory(slot, false);
+        if (!factory) return E_OUTOFMEMORY;
+        HRESULT hr = factory->QueryInterface(riid, ppv);
+        factory->Release();
+        return hr;
+    }
+    return CLASS_E_CLASSNOTAVAILABLE;
 }
 
 STDAPI DllCanUnloadNow() {
