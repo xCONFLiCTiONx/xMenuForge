@@ -56,6 +56,7 @@ struct ContextRules {
     bool showOnFolders = true;
     bool showOnBackground = false;
     bool allowMultiSelect = true;
+    std::wstring modifierKey = L"none"; // none | ctrl | shift | alt | ctrl_shift
     std::vector<std::wstring> fileCategories; // empty = all
     std::vector<std::wstring> extensions;     // empty = all
 };
@@ -81,6 +82,7 @@ struct AppearanceConfig {
     bool showIcons = true;
     std::wstring iconTheme = L"auto";         // auto | dark | light
     std::wstring modernSubmenuMode = L"flyout"; // flyout | flatten
+    bool windowMaximized = false;
 };
 
 struct ExecutionConfig {
@@ -109,6 +111,9 @@ struct AppConfig {
 struct SelectionContext {
     bool isBackground = false;
     bool isFolder = false;
+    bool ctrlHeld = false;
+    bool shiftHeld = false;
+    bool altHeld = false;
     std::vector<std::wstring> paths;
 };
 

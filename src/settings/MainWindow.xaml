@@ -4,16 +4,17 @@
         Title="xMenuForge"
         Width="1120" Height="640"
         MinWidth="860" MinHeight="500"
-        MaxWidth="1280" MaxHeight="720"
         WindowStartupLocation="CenterScreen"
         Background="{StaticResource BgWindowBrush}"
         WindowStyle="None"
-        ResizeMode="CanResize">
+        ResizeMode="CanResize"
+        StateChanged="Window_StateChanged"
+        Closing="Window_Closing">
     <WindowChrome.WindowChrome>
         <WindowChrome CaptionHeight="42" ResizeBorderThickness="5" GlassFrameThickness="0" CornerRadius="10"/>
     </WindowChrome.WindowChrome>
 
-    <Border BorderBrush="{StaticResource BorderSubtleBrush}" BorderThickness="1" Background="{StaticResource BgWindowBrush}">
+    <Border x:Name="RootFrameBorder" BorderBrush="{StaticResource BorderSubtleBrush}" BorderThickness="1" Background="{StaticResource BgWindowBrush}">
         <Grid>
             <Grid.RowDefinitions>
                 <RowDefinition Height="44"/>
@@ -38,6 +39,10 @@
                         <Button x:Name="MinBtn" Width="36" Height="28" Padding="0" ToolTip="Minimize"
                                 Style="{StaticResource SecondaryButton}" Background="Transparent" BorderThickness="0" Click="Minimize_Click">
                             <Path Data="M0,5 L10,5" Stroke="{StaticResource TextSecondaryBrush}" StrokeThickness="1.3" Width="10" Height="10" Stretch="None"/>
+                        </Button>
+                        <Button x:Name="MaxBtn" Width="36" Height="28" Padding="0" ToolTip="Maximize / Restore"
+                                Style="{StaticResource SecondaryButton}" Background="Transparent" BorderThickness="0" Click="Maximize_Click">
+                            <Path x:Name="MaxGlyph" Data="M1,1 L9,1 L9,9 L1,9 Z" Stroke="{StaticResource TextSecondaryBrush}" StrokeThickness="1.3" Width="10" Height="10" Stretch="None"/>
                         </Button>
                         <Button x:Name="CloseBtn" Width="36" Height="28" Padding="0" ToolTip="Close"
                                 Style="{StaticResource SecondaryButton}" Background="Transparent" BorderThickness="0" Click="Close_Click">
@@ -208,6 +213,13 @@
                             <Button Content="Nest Into Category" Style="{StaticResource SecondaryButton}" Margin="0,0,8,0" Click="DesignerNest_Click"/>
                             <Button Content="Move to Root" Style="{StaticResource SecondaryButton}" Margin="0,0,8,0" Click="DesignerUnnest_Click"/>
                             <Button Content="Toggle Enabled" Style="{StaticResource SecondaryButton}" Margin="0,0,8,0" Click="DesignerToggleEnabled_Click"/>
+                            <ComboBox x:Name="DesignerModifierCombo" Width="138" Margin="0,0,8,0" ToolTip="Set modifier key for selected item" SelectionChanged="DesignerModifier_Changed">
+                                <ComboBoxItem Content="Key: Always" Tag="none"/>
+                                <ComboBoxItem Content="Key: Hold Ctrl" Tag="ctrl"/>
+                                <ComboBoxItem Content="Key: Hold Shift" Tag="shift"/>
+                                <ComboBoxItem Content="Key: Hold Alt" Tag="alt"/>
+                                <ComboBoxItem Content="Key: Ctrl+Shift" Tag="ctrl_shift"/>
+                            </ComboBox>
                             <Button Content="Delete" Style="{StaticResource DangerButton}" Click="DesignerDelete_Click"/>
                         </WrapPanel>
 
@@ -222,6 +234,7 @@
                                 <DockPanel>
                                     <TextBlock DockPanel.Dock="Top" Text="Menu Hierarchy (drag to reorder)" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource TextSecondaryBrush}" Margin="4,0,0,8"/>
                                     <ListBox x:Name="DesignerList" AllowDrop="True"
+                                             SelectionChanged="DesignerList_SelectionChanged"
                                              PreviewMouseLeftButtonDown="DesignerList_PreviewMouseLeftButtonDown"
                                              PreviewMouseMove="DesignerList_PreviewMouseMove"
                                              Drop="DesignerList_Drop"
@@ -233,11 +246,25 @@
                                 <DockPanel>
                                     <StackPanel DockPanel.Dock="Top" Margin="0,0,0,10">
                                         <TextBlock Text="Live Context Menu Preview" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,8"/>
-                                        <ComboBox x:Name="PreviewContextCombo" SelectionChanged="PreviewContext_Changed">
-                                            <ComboBoxItem Content="File (example.ps1)" IsSelected="True" Tag="file"/>
-                                            <ComboBoxItem Content="Folder (C:\Projects)" Tag="folder"/>
-                                            <ComboBoxItem Content="Directory Background" Tag="background"/>
-                                        </ComboBox>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="8"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <ComboBox x:Name="PreviewContextCombo" Grid.Column="0" SelectionChanged="PreviewContext_Changed">
+                                                <ComboBoxItem Content="File (example.ps1)" IsSelected="True" Tag="file"/>
+                                                <ComboBoxItem Content="Folder (C:\Projects)" Tag="folder"/>
+                                                <ComboBoxItem Content="Directory Background" Tag="background"/>
+                                            </ComboBox>
+                                            <ComboBox x:Name="PreviewModifierCombo" Grid.Column="2" SelectionChanged="PreviewContext_Changed">
+                                                <ComboBoxItem Content="Normal Click" IsSelected="True" Tag="none"/>
+                                                <ComboBoxItem Content="Hold Ctrl" Tag="ctrl"/>
+                                                <ComboBoxItem Content="Hold Shift" Tag="shift"/>
+                                                <ComboBoxItem Content="Hold Alt" Tag="alt"/>
+                                                <ComboBoxItem Content="Hold Ctrl + Shift" Tag="ctrl_shift"/>
+                                            </ComboBox>
+                                        </Grid>
                                     </StackPanel>
                                     <Border Background="#111318" BorderBrush="#2E3545" BorderThickness="1" CornerRadius="8" Padding="8">
                                         <ScrollViewer VerticalScrollBarVisibility="Auto">
@@ -384,8 +411,27 @@
                                             <CheckBox x:Name="CustomLogChk" Content="Log Hidden Output" Margin="0,0,18,6"/>
                                         </WrapPanel>
 
-                                        <TextBlock Text="Extension Filter (optional, comma-separated e.g. .ps1, .json, .md)" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,4"/>
-                                        <TextBox x:Name="CustomExtsBox" Margin="0,0,0,14"/>
+                                        <Grid Margin="0,0,0,14">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="12"/>
+                                                <ColumnDefinition Width="210"/>
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel Grid.Column="0">
+                                                <TextBlock Text="Extension Filter (optional, comma-separated e.g. .ps1, .json, .md)" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,4"/>
+                                                <TextBox x:Name="CustomExtsBox"/>
+                                            </StackPanel>
+                                            <StackPanel Grid.Column="2">
+                                                <TextBlock Text="Modifier Key to Reveal" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,4"/>
+                                                <ComboBox x:Name="CustomModifierCombo">
+                                                    <ComboBoxItem Content="Always (Normal Click)" Tag="none"/>
+                                                    <ComboBoxItem Content="Hold Ctrl" Tag="ctrl"/>
+                                                    <ComboBoxItem Content="Hold Shift (Classic)" Tag="shift"/>
+                                                    <ComboBoxItem Content="Hold Alt" Tag="alt"/>
+                                                    <ComboBoxItem Content="Hold Ctrl + Shift" Tag="ctrl_shift"/>
+                                                </ComboBox>
+                                            </StackPanel>
+                                        </Grid>
 
                                         <Button Content="Save Custom Command" Style="{StaticResource PrimaryButton}" HorizontalAlignment="Left" Click="CustomSave_Click"/>
                                     </StackPanel>
@@ -541,6 +587,17 @@
 
                                         <TextBlock Text="File Categories (leave all unchecked to allow every file type)" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,8"/>
                                         <WrapPanel x:Name="RuleCategoriesPanel" Margin="0,0,0,14"/>
+
+                                        <TextBlock Text="Modifier Key to Reveal (reduces everyday menu clutter)" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,6"/>
+                                        <ComboBox x:Name="RuleModifierCombo" Width="320" HorizontalAlignment="Left" Margin="0,0,0,4">
+                                            <ComboBoxItem Content="Always Show (Normal Right-Click)" Tag="none"/>
+                                            <ComboBoxItem Content="Hold Ctrl (Modern Win11 &amp; Classic)" Tag="ctrl"/>
+                                            <ComboBoxItem Content="Hold Shift (Classic / Extended Menu)" Tag="shift"/>
+                                            <ComboBoxItem Content="Hold Alt (Modern Win11 &amp; Classic)" Tag="alt"/>
+                                            <ComboBoxItem Content="Hold Ctrl + Shift" Tag="ctrl_shift"/>
+                                        </ComboBox>
+                                        <TextBlock Text="Tip: Hold Ctrl or Alt to reveal extra items inside the Windows 11 Modern menu. Windows 11 opens the Classic menu on Shift + Right-Click."
+                                                   FontSize="11" Foreground="{StaticResource TextMutedBrush}" TextWrapping="Wrap" Margin="0,0,0,14"/>
 
                                         <TextBlock Text="Specific File Extensions (comma-separated, e.g. .ps1, .json, .cpp)" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,6"/>
                                         <TextBox x:Name="RuleExtensionsBox" Margin="0,0,0,16"/>

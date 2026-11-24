@@ -237,6 +237,7 @@ static json::Value SerializeConfig(const AppConfig& cfg) {
     app["showIcons"] = cfg.appearance.showIcons;
     app["iconTheme"] = WideToUtf8(cfg.appearance.iconTheme);
     app["modernSubmenuMode"] = WideToUtf8(cfg.appearance.modernSubmenuMode);
+    app["windowMaximized"] = cfg.appearance.windowMaximized;
     root["appearance"] = std::move(app);
 
     json::Value exec;
@@ -290,6 +291,7 @@ static json::Value SerializeConfig(const AppConfig& cfg) {
         rules["showOnFolders"] = item.rules.showOnFolders;
         rules["showOnBackground"] = item.rules.showOnBackground;
         rules["allowMultiSelect"] = item.rules.allowMultiSelect;
+        rules["modifierKey"] = WideToUtf8(item.rules.modifierKey.empty() ? L"none" : item.rules.modifierKey);
         json::Value::Array cats;
         for (const auto& c : item.rules.fileCategories) cats.push_back(WideToUtf8(c));
         rules["fileCategories"] = json::Value(std::move(cats));
@@ -315,6 +317,7 @@ static AppConfig DeserializeConfig(const json::Value& root) {
         cfg.appearance.showIcons = a.Get("showIcons").AsBool(true);
         cfg.appearance.iconTheme = Utf8ToWide(a.Get("iconTheme").AsStringOr("auto"));
         cfg.appearance.modernSubmenuMode = Utf8ToWide(a.Get("modernSubmenuMode").AsStringOr("flyout"));
+        cfg.appearance.windowMaximized = a.Get("windowMaximized").AsBool(false);
     }
 
     if (root.Contains("execution")) {
@@ -375,6 +378,7 @@ static AppConfig DeserializeConfig(const json::Value& root) {
                 item.rules.showOnFolders = ru.Get("showOnFolders").AsBool(true);
                 item.rules.showOnBackground = ru.Get("showOnBackground").AsBool(false);
                 item.rules.allowMultiSelect = ru.Get("allowMultiSelect").AsBool(true);
+                item.rules.modifierKey = Utf8ToWide(ru.Get("modifierKey").AsStringOr("none"));
                 for (const auto& c : ru.Get("fileCategories").AsArray()) {
                     item.rules.fileCategories.push_back(Utf8ToWide(c.AsString()));
                 }
@@ -433,10 +437,21 @@ bool SaveConfig(const AppConfig& config) {
     return MoveFileExW(tmpPath.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) != 0;
 }
 
+static bool MatchesModifierKey(const MenuItem& item, const SelectionContext& ctx) {
+    const std::wstring& mod = item.rules.modifierKey;
+    if (mod.empty() || mod == L"none") return true;
+    if (mod == L"ctrl") return ctx.ctrlHeld;
+    if (mod == L"shift") return ctx.shiftHeld;
+    if (mod == L"alt") return ctx.altHeld;
+    if (mod == L"ctrl_shift") return ctx.ctrlHeld && ctx.shiftHeld;
+    return true;
+}
+
 bool MatchesContext(const MenuItem& item, const SelectionContext& ctx) {
     if (!item.enabled) return false;
     if (item.kind == ItemKind::Separator) return true;
-    if (item.kind == ItemKind::Category) return true; // Visibility determined by visible children
+    if (!MatchesModifierKey(item, ctx)) return false;
+    if (item.kind == ItemKind::Category) return true; // Visibility determined by modifier + visible children
 
     if (item.builtIn && item.builtInAction == L"settings") {
         return true;
@@ -494,7 +509,7 @@ bool HasAnyVisibleCommand(const AppConfig& config, const std::wstring& parentId,
         if (item.kind == ItemKind::Command && MatchesContext(item, ctx)) {
             return true;
         }
-        if (item.kind == ItemKind::Category && HasAnyVisibleCommand(config, item.id, ctx)) {
+        if (item.kind == ItemKind::Category && MatchesModifierKey(item, ctx) && HasAnyVisibleCommand(config, item.id, ctx)) {
             return true;
         }
     }
@@ -508,7 +523,7 @@ std::vector<const MenuItem*> GetVisibleChildren(const AppConfig& config, const s
         if (item.kind == ItemKind::Command) {
             if (MatchesContext(item, ctx)) raw.push_back(&item);
         } else if (item.kind == ItemKind::Category) {
-            if (HasAnyVisibleCommand(config, item.id, ctx)) raw.push_back(&item);
+            if (MatchesModifierKey(item, ctx) && HasAnyVisibleCommand(config, item.id, ctx)) raw.push_back(&item);
         } else if (item.kind == ItemKind::Separator) {
             raw.push_back(&item);
         }

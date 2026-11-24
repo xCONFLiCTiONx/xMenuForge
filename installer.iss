@@ -32,7 +32,7 @@ Name: "{group}\xMenuForge Settings"; Filename: "{app}\xMenuForge.Settings.exe"; 
 
 [Run]
 Filename: "{app}\xMenuForge.Host.exe"; Parameters: "--register"; StatusMsg: "Registering Windows 11 Explorer Integration..."; Flags: runhidden waituntilterminated
-Filename: "{app}\xMenuForge.Settings.exe"; Description: "Launch xMenuForge Settings"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\xMenuForge.Settings.exe"; Description: "Launch xMenuForge Settings"; Flags: nowait postinstall skipifsilent shellexec
 
 [UninstallRun]
 Filename: "{app}\xMenuForge.Host.exe"; Parameters: "--unregister"; RunOnceId: "UnregisterXMenuForge"; StatusMsg: "Unregistering Explorer Integration..."; Flags: runhidden waituntilterminated

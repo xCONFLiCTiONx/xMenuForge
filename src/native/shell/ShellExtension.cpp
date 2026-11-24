@@ -133,6 +133,15 @@ void LaunchHost(const std::wstring& modeFlag, const std::wstring& itemId, const 
     if (ctx.isFolder) {
         cmdLine += L" --folder";
     }
+    if (ctx.ctrlHeld) {
+        cmdLine += L" --ctrl";
+    }
+    if (ctx.shiftHeld) {
+        cmdLine += L" --shift";
+    }
+    if (ctx.altHeld) {
+        cmdLine += L" --alt";
+    }
 
     POINT pt{};
     if (GetCursorPos(&pt)) {
@@ -170,6 +179,26 @@ void LaunchHost(const std::wstring& modeFlag, const std::wstring& itemId, const 
 // Strictly adheres to Microsoft Learn docs: 1 submenu level (no recursive EnumSubCommands).
 // ============================================================================
 
+struct ModifierSnapshot {
+    bool ctrl = false;
+    bool shift = false;
+    bool alt = false;
+
+    static ModifierSnapshot Capture(bool extendedVerbs = false) {
+        ModifierSnapshot m;
+        m.ctrl = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
+        m.shift = extendedVerbs || ((GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0);
+        m.alt = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
+        return m;
+    }
+
+    void ApplyTo(xmf::SelectionContext& ctx) const {
+        ctx.ctrlHeld = ctrl || ((GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0);
+        ctx.shiftHeld = shift || ((GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0);
+        ctx.altHeld = alt || ((GetAsyncKeyState(VK_MENU) & 0x8000) != 0);
+    }
+};
+
 struct LeafSpec {
     std::wstring id;
     std::wstring title;
@@ -178,6 +207,7 @@ struct LeafSpec {
     bool isCategoryFlyout = false;
     bool separatorBefore = false;
     xmf::MenuItem itemCopy;
+    ModifierSnapshot modifiers;
 };
 
 class LeafCommand final : public IExplorerCommand, public IObjectWithSite {
@@ -241,8 +271,10 @@ public:
     IFACEMETHODIMP GetState(IShellItemArray* items, BOOL, EXPCMDSTATE* state) override {
         if (!state) return E_POINTER;
         xmf::SelectionContext ctx = ExtractContext(items, site_);
+        spec_.modifiers.ApplyTo(ctx);
         if (spec_.isCategoryFlyout) {
-            *state = xmf::HasAnyVisibleCommand(config_, spec_.id, ctx) ? ECS_ENABLED : ECS_HIDDEN;
+            bool visible = xmf::MatchesContext(spec_.itemCopy, ctx) && xmf::HasAnyVisibleCommand(config_, spec_.id, ctx);
+            *state = visible ? ECS_ENABLED : ECS_HIDDEN;
         } else {
             *state = xmf::MatchesContext(spec_.itemCopy, ctx) ? ECS_ENABLED : ECS_HIDDEN;
         }
@@ -250,6 +282,7 @@ public:
     }
     IFACEMETHODIMP Invoke(IShellItemArray* items, IBindCtx*) override {
         xmf::SelectionContext ctx = ExtractContext(items, site_);
+        spec_.modifiers.ApplyTo(ctx);
         if (spec_.isCategoryFlyout) {
             LaunchHost(L"--flyout", spec_.id, ctx);
         } else {
@@ -358,7 +391,7 @@ private:
 
 class RootCommand final : public IExplorerCommand, public IObjectWithSite {
 public:
-    RootCommand() { ++g_objects; }
+    RootCommand() : modifiers_(ModifierSnapshot::Capture()) { ++g_objects; }
     ~RootCommand() {
         if (site_) site_->Release();
         --g_objects;
@@ -423,6 +456,7 @@ public:
             return S_OK;
         }
         xmf::SelectionContext ctx = ExtractContext(items, site_);
+        modifiers_.ApplyTo(ctx);
         *state = xmf::HasAnyVisibleCommand(config_, L"", ctx) ? ECS_ENABLED : ECS_HIDDEN;
         return S_OK;
     }
@@ -461,6 +495,7 @@ public:
             spec.isCategoryFlyout = isCatFlyout;
             spec.separatorBefore = pendingSeparator && !built.empty();
             spec.itemCopy = item;
+            spec.modifiers = modifiers_;
             pendingSeparator = false;
 
             auto* cmd = new (std::nothrow) LeafCommand(std::move(spec), config_);
@@ -541,6 +576,7 @@ private:
     IUnknown* site_ = nullptr;
     xmf::AppConfig config_;
     bool configLoaded_ = false;
+    ModifierSnapshot modifiers_;
 };
 
 // ============================================================================
@@ -673,6 +709,8 @@ public:
         if (!config_.integrations.classicContextMenuEnabled) {
             return MAKE_HRESULT(SEVERITY_SUCCESS, FACILITY_NULL, 0);
         }
+
+        ModifierSnapshot::Capture((uFlags & CMF_EXTENDEDVERBS) != 0).ApplyTo(ctx_);
 
         for (HBITMAP b : bitmaps_) {
             if (b) DeleteObject(b);

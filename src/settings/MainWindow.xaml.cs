@@ -29,8 +29,12 @@ public partial class MainWindow : Window
         SourceInitialized += (_, _) => ApplyDwmDarkFrame();
         Loaded += async (_, _) =>
         {
-            FitToWorkArea();
             _config = ConfigService.Load();
+            FitToWorkArea();
+            if (_config.Appearance.WindowMaximized)
+            {
+                WindowState = WindowState.Maximized;
+            }
             BuildCategoryRuleCheckboxes();
             RefreshAllViews();
             await RefreshHealthAsync();
@@ -40,10 +44,12 @@ public partial class MainWindow : Window
     private void FitToWorkArea()
     {
         var wa = SystemParameters.WorkArea;
-        double maxW = Math.Min(1280, wa.Width - 36);
-        double maxH = Math.Min(720, wa.Height - 36);
-        if (maxW >= MinWidth && Width > maxW) Width = maxW;
-        if (maxH >= MinHeight && Height > maxH) Height = maxH;
+        MaxHeight = wa.Height + 14;
+        MaxWidth = wa.Width + 14;
+        double targetW = Math.Min(Width, wa.Width - 36);
+        double targetH = Math.Min(Height, wa.Height - 36);
+        if (targetW >= MinWidth) Width = targetW;
+        if (targetH >= MinHeight) Height = targetH;
         Left = wa.Left + Math.Max(0, (wa.Width - Width) / 2);
         Top = wa.Top + Math.Max(0, (wa.Height - Height) / 2);
     }
@@ -95,6 +101,41 @@ public partial class MainWindow : Window
     // =========================================================================
 
     private void Minimize_Click(object sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
+
+    private void Maximize_Click(object sender, RoutedEventArgs e)
+    {
+        WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
+    }
+
+    private void Window_StateChanged(object sender, EventArgs e)
+    {
+        bool isMax = WindowState == WindowState.Maximized;
+        if (RootFrameBorder != null)
+        {
+            RootFrameBorder.Padding = isMax ? new Thickness(7) : new Thickness(0);
+        }
+        if (MaxGlyph != null)
+        {
+            MaxGlyph.Data = Geometry.Parse(isMax
+                ? "M1,3 L7,3 L7,9 L1,9 Z M3,1 L9,1 L9,7"
+                : "M1,1 L9,1 L9,9 L1,9 Z");
+        }
+        if (_config.Items.Count > 0 && _config.Appearance.WindowMaximized != isMax)
+        {
+            _config.Appearance.WindowMaximized = isMax;
+            ConfigService.Save(_config);
+        }
+    }
+
+    private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
+    {
+        if (_config.Items.Count > 0)
+        {
+            _config.Appearance.WindowMaximized = WindowState == WindowState.Maximized;
+            ConfigService.Save(_config);
+        }
+    }
+
     private void Close_Click(object sender, RoutedEventArgs e) => Close();
 
     private void Nav_Checked(object sender, RoutedEventArgs e)
@@ -327,11 +368,19 @@ public partial class MainWindow : Window
             Grid.SetColumn(titleTb, 1);
             grid.Children.Add(titleTb);
 
+            string modTag = item.Rules.ModifierKey switch
+            {
+                "ctrl" => " [Ctrl]",
+                "shift" => " [Shift]",
+                "alt" => " [Alt]",
+                "ctrl_shift" => " [Ctrl+Shift]",
+                _ => ""
+            };
             var statusTb = new TextBlock
             {
-                Text = !item.Enabled ? "Disabled" : (item.Kind == "category" ? "Category" : (item.BuiltIn ? "Built-in" : "Custom")),
+                Text = (!item.Enabled ? "Disabled" : (item.Kind == "category" ? "Category" : (item.BuiltIn ? "Built-in" : "Custom"))) + modTag,
                 FontSize = 11,
-                Foreground = (Brush)FindResource("TextMutedBrush"),
+                Foreground = string.IsNullOrEmpty(modTag) ? (Brush)FindResource("TextMutedBrush") : (Brush)FindResource("AccentBrush"),
                 VerticalAlignment = VerticalAlignment.Center
             };
             Grid.SetColumn(statusTb, 2);
@@ -493,6 +542,31 @@ public partial class MainWindow : Window
         RefreshBuiltInCommands();
     }
 
+    private bool _updatingDesignerModifier;
+
+    private void DesignerList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        var sel = GetSelectedDesignerItem();
+        if (DesignerModifierCombo == null) return;
+        _updatingDesignerModifier = true;
+        DesignerModifierCombo.IsEnabled = sel != null && sel.Kind != "separator";
+        SelectComboByTag(DesignerModifierCombo, sel?.Rules.ModifierKey ?? "none");
+        _updatingDesignerModifier = false;
+    }
+
+    private void DesignerModifier_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (_updatingDesignerModifier) return;
+        var sel = GetSelectedDesignerItem();
+        if (sel == null || sel.Kind == "separator") return;
+        string mod = GetSelectedComboTag(DesignerModifierCombo, "none");
+        if (sel.Rules.ModifierKey == mod) return;
+        sel.Rules.ModifierKey = mod;
+        SaveConfigWithFeedback($"Updated modifier for '{sel.Title}'");
+        RefreshDesignerList();
+        RefreshBuiltInCommands();
+    }
+
     private void DesignerDelete_Click(object sender, RoutedEventArgs e)
     {
         var sel = GetSelectedDesignerItem();
@@ -518,9 +592,28 @@ public partial class MainWindow : Window
         LivePreviewPanel.Children.Clear();
 
         string ctxMode = ((PreviewContextCombo.SelectedItem as ComboBoxItem)?.Tag as string) ?? "file";
+        string simMod = ((PreviewModifierCombo?.SelectedItem as ComboBoxItem)?.Tag as string) ?? "none";
+        bool ctrlHeld = simMod is "ctrl" or "ctrl_shift";
+        bool shiftHeld = simMod is "shift" or "ctrl_shift";
+        bool altHeld = simMod == "alt";
+
+        bool MatchesMod(MenuItemConfig item)
+        {
+            return item.Rules.ModifierKey switch
+            {
+                "ctrl" => ctrlHeld,
+                "shift" => shiftHeld,
+                "alt" => altHeld,
+                "ctrl_shift" => ctrlHeld && shiftHeld,
+                _ => true
+            };
+        }
+
         bool Matches(MenuItemConfig item)
         {
             if (!item.Enabled) return false;
+            if (item.Kind == "separator") return true;
+            if (!MatchesMod(item)) return false;
             if (item.Kind != "command") return true;
             if (item.BuiltIn && item.BuiltInAction == "settings") return true;
             return ctxMode switch
@@ -574,6 +667,7 @@ public partial class MainWindow : Window
             }
             else if (item.Kind == "category")
             {
+                if (!MatchesMod(item)) continue;
                 var kids = _config.Items.Where(k => k.ParentId == item.Id && k.Kind == "command" && Matches(k)).OrderBy(k => k.Order).ToList();
                 if (kids.Count == 0) continue;
                 if (flatten)
@@ -608,6 +702,7 @@ public partial class MainWindow : Window
             var grid = new Grid();
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
             var left = new StackPanel();
             left.Children.Add(new TextBlock { Text = item.Title, FontWeight = FontWeights.SemiBold, FontSize = 13.5 });
@@ -621,6 +716,26 @@ public partial class MainWindow : Window
             Grid.SetColumn(left, 0);
             grid.Children.Add(left);
 
+            var modCombo = new ComboBox { Width = 128, Margin = new Thickness(10, 0, 14, 0), VerticalAlignment = VerticalAlignment.Center, ToolTip = "Modifier key required to show this command" };
+            modCombo.Items.Add(new ComboBoxItem { Content = "Always", Tag = "none" });
+            modCombo.Items.Add(new ComboBoxItem { Content = "Hold Ctrl", Tag = "ctrl" });
+            modCombo.Items.Add(new ComboBoxItem { Content = "Hold Shift", Tag = "shift" });
+            modCombo.Items.Add(new ComboBoxItem { Content = "Hold Alt", Tag = "alt" });
+            modCombo.Items.Add(new ComboBoxItem { Content = "Ctrl + Shift", Tag = "ctrl_shift" });
+            SelectComboByTag(modCombo, item.Rules.ModifierKey);
+            modCombo.SelectionChanged += (_, _) =>
+            {
+                string m = GetSelectedComboTag(modCombo, "none");
+                if (item.Rules.ModifierKey != m)
+                {
+                    item.Rules.ModifierKey = m;
+                    SaveConfigWithFeedback($"Updated modifier for {item.Title}");
+                    RefreshDesignerList();
+                }
+            };
+            Grid.SetColumn(modCombo, 1);
+            grid.Children.Add(modCombo);
+
             var toggle = new CheckBox
             {
                 Style = (Style)FindResource("ToggleSwitch"),
@@ -629,7 +744,7 @@ public partial class MainWindow : Window
             };
             toggle.Checked += (_, _) => { item.Enabled = true; SaveConfigWithFeedback($"Enabled {item.Title}"); };
             toggle.Unchecked += (_, _) => { item.Enabled = false; SaveConfigWithFeedback($"Disabled {item.Title}"); };
-            Grid.SetColumn(toggle, 1);
+            Grid.SetColumn(toggle, 2);
             grid.Children.Add(toggle);
 
             card.Child = grid;
@@ -687,6 +802,7 @@ public partial class MainWindow : Window
         CustomAdminChk.IsChecked = _selectedCustom.Runner.RunAsAdmin;
         CustomLogChk.IsChecked = _selectedCustom.Runner.LogOutput;
         CustomExtsBox.Text = string.Join(", ", _selectedCustom.Rules.Extensions);
+        SelectComboByTag(CustomModifierCombo, _selectedCustom.Rules.ModifierKey);
     }
 
     private void AddCustomCommand_Click(object sender, RoutedEventArgs e)
@@ -730,6 +846,7 @@ public partial class MainWindow : Window
             .Select(x => x.StartsWith('.') ? x.ToLowerInvariant() : "." + x.ToLowerInvariant())
             .Distinct()
             .ToList();
+        _selectedCustom.Rules.ModifierKey = GetSelectedComboTag(CustomModifierCombo, "none");
 
         SaveConfigWithFeedback("Saved custom command");
         RefreshCustomCommandsList();
@@ -837,9 +954,10 @@ public partial class MainWindow : Window
     {
         string? prevId = _selectedRuleCmd?.Id;
         RulesCommandList.Items.Clear();
-        foreach (var item in _config.Items.Where(i => i.Kind == "command").OrderBy(i => i.Order))
+        foreach (var item in _config.Items.Where(i => i.Kind is "command" or "category").OrderBy(i => i.Order))
         {
-            var lbi = new ListBoxItem { Content = item.Title, Tag = item.Id };
+            string label = item.Kind == "category" ? $"[Category] {item.Title}" : item.Title;
+            var lbi = new ListBoxItem { Content = label, Tag = item.Id };
             RulesCommandList.Items.Add(lbi);
             if (item.Id == prevId) RulesCommandList.SelectedItem = lbi;
         }
@@ -862,6 +980,7 @@ public partial class MainWindow : Window
         RuleFoldersChk.IsChecked = _selectedRuleCmd.Rules.ShowOnFolders;
         RuleBgChk.IsChecked = _selectedRuleCmd.Rules.ShowOnBackground;
         RuleMultiChk.IsChecked = _selectedRuleCmd.Rules.AllowMultiSelect;
+        SelectComboByTag(RuleModifierCombo, _selectedRuleCmd.Rules.ModifierKey);
         RuleExtensionsBox.Text = string.Join(", ", _selectedRuleCmd.Rules.Extensions);
 
         foreach (CheckBox chk in RuleCategoriesPanel.Children.OfType<CheckBox>())
@@ -878,6 +997,7 @@ public partial class MainWindow : Window
         _selectedRuleCmd.Rules.ShowOnFolders = RuleFoldersChk.IsChecked == true;
         _selectedRuleCmd.Rules.ShowOnBackground = RuleBgChk.IsChecked == true;
         _selectedRuleCmd.Rules.AllowMultiSelect = RuleMultiChk.IsChecked == true;
+        _selectedRuleCmd.Rules.ModifierKey = GetSelectedComboTag(RuleModifierCombo, "none");
         _selectedRuleCmd.Rules.FileCategories = RuleCategoriesPanel.Children
             .OfType<CheckBox>()
             .Where(c => c.IsChecked == true && c.Tag is string)

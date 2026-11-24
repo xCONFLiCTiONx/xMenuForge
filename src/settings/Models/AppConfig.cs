@@ -36,6 +36,9 @@ public sealed class AppearanceConfig
 
     [JsonPropertyName("modernSubmenuMode")]
     public string ModernSubmenuMode { get; set; } = "flyout"; // flyout | flatten
+
+    [JsonPropertyName("windowMaximized")]
+    public bool WindowMaximized { get; set; } = false;
 }
 
 public sealed class ExecutionConfig
@@ -156,6 +159,9 @@ public sealed class ContextRulesConfig
 
     [JsonPropertyName("allowMultiSelect")]
     public bool AllowMultiSelect { get; set; } = true;
+
+    [JsonPropertyName("modifierKey")]
+    public string ModifierKey { get; set; } = "none"; // none | ctrl | shift | alt | ctrl_shift
 
     [JsonPropertyName("fileCategories")]
     public List<string> FileCategories { get; set; } = new();
