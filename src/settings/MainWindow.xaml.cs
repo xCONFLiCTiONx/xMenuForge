@@ -1203,21 +1203,6 @@ public partial class MainWindow : Window
         ConfigService.RestartExplorer();
     }
 
-    private void ImportXToolsMenu_Click(object sender, RoutedEventArgs e)
-    {
-        int count = ConfigService.ImportFromXToolsMenu(_config);
-        if (count > 0)
-        {
-            SaveConfigWithFeedback($"Imported {count} command(s)");
-            RefreshAllViews();
-            DarkDialog.ShowInfo(this, "Import Complete", $"Imported {count} custom command(s) from xToolsMenu.");
-        }
-        else
-        {
-            DarkDialog.ShowInfo(this, "Nothing to Import", "No new custom commands were found in HKCU\\Software\\xToolsMenu\\CustomCommands.");
-        }
-    }
-
     private async Task RefreshHealthAsync()
     {
         var h = await ConfigService.QueryHealthAsync();
@@ -1272,12 +1257,47 @@ public partial class MainWindow : Window
 
     private void ExportConfig_Click(object sender, RoutedEventArgs e)
     {
-        var dlg = new SaveFileDialog { FileName = "xMenuForge-config.json", Filter = "JSON Files|*.json" };
+        ConfigService.Save(_config);
+        var dlg = new SaveFileDialog
+        {
+            Title = "Backup xMenuForge Settings",
+            FileName = $"xMenuForge-backup-{DateTime.Now:yyyy-MM-dd}.json",
+            Filter = "JSON Backup Files|*.json|All Files|*.*"
+        };
         if (dlg.ShowDialog() == true)
         {
             File.Copy(ConfigService.ConfigPath, dlg.FileName, overwrite: true);
-            DarkDialog.ShowInfo(this, "Exported", $"Configuration exported to:\n{dlg.FileName}");
+            DarkDialog.ShowInfo(this, "Backup Saved", $"Your xMenuForge settings were backed up to:\n{dlg.FileName}");
         }
+    }
+
+    private void ImportBackup_Click(object sender, RoutedEventArgs e)
+    {
+        var dlg = new OpenFileDialog
+        {
+            Title = "Restore xMenuForge Settings Backup",
+            Filter = "JSON Backup Files|*.json|All Files|*.*"
+        };
+        if (dlg.ShowDialog() != true) return;
+
+        var restored = ConfigService.LoadFromFile(dlg.FileName);
+        if (restored == null || restored.Items.Count == 0)
+        {
+            DarkDialog.ShowInfo(this, "Invalid Backup", "The selected file is not a valid xMenuForge configuration backup.");
+            return;
+        }
+
+        if (!DarkDialog.Confirm(this, "Restore Settings Backup",
+            $"Restore {restored.Items.Count} item(s) and all preferences from:\n{Path.GetFileName(dlg.FileName)}?\n\nYour current settings will be saved to config.json.bak first."))
+            return;
+
+        if (File.Exists(ConfigService.ConfigPath))
+            File.Copy(ConfigService.ConfigPath, ConfigService.ConfigPath + ".bak", overwrite: true);
+
+        _config = restored;
+        SaveConfigWithFeedback("Restored settings from backup");
+        RefreshAllViews();
+        DarkDialog.ShowInfo(this, "Backup Restored", $"Restored {restored.Items.Count} item(s) from backup.");
     }
 
     private void ClearLogs_Click(object sender, RoutedEventArgs e)

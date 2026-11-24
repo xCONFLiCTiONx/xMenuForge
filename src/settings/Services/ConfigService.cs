@@ -279,64 +279,19 @@ public static class ConfigService
         return list;
     }
 
-    public static int ImportFromXToolsMenu(AppConfig config)
+    public static AppConfig? LoadFromFile(string path)
     {
-        int imported = 0;
         try
         {
-            using var root = Registry.CurrentUser.OpenSubKey(@"Software\xToolsMenu\CustomCommands");
-            if (root == null) return 0;
-
-            int nextOrder = config.Items.Count > 0 ? config.Items.Max(i => i.Order) + 1 : 0;
-            foreach (var subName in root.GetSubKeyNames())
-            {
-                using var sub = root.OpenSubKey(subName);
-                if (sub == null) continue;
-                var exePath = sub.GetValue("Path") as string ?? "";
-                if (string.IsNullOrWhiteSpace(exePath)) continue;
-
-                var id = "custom.imported." + new string(subName.ToLowerInvariant().Where(char.IsLetterOrDigit).ToArray());
-                if (config.Items.Any(i => i.Id == id || i.Title.Equals(subName, StringComparison.OrdinalIgnoreCase)))
-                    continue;
-
-                var args = sub.GetValue("Args") as string ?? "";
-                var icon = sub.GetValue("IconPath_Dark") as string ?? sub.GetValue("IconPath") as string ?? exePath;
-                bool showFile = Convert.ToInt32(sub.GetValue("ShowFile") ?? 1) != 0;
-                bool showDir = Convert.ToInt32(sub.GetValue("ShowDir") ?? 1) != 0;
-                bool showBg = Convert.ToInt32(sub.GetValue("ShowBG") ?? 1) != 0;
-                bool runAdmin = Convert.ToInt32(sub.GetValue("RunAsAdmin") ?? 0) != 0;
-
-                config.Items.Add(new MenuItemConfig
-                {
-                    Id = id,
-                    Kind = "command",
-                    ParentId = "",
-                    Order = nextOrder++,
-                    Enabled = true,
-                    BuiltIn = false,
-                    Title = subName,
-                    Description = "Imported from xToolsMenu",
-                    Icon = icon,
-                    Runner = new RunnerConfig
-                    {
-                        Type = exePath.EndsWith(".ps1", StringComparison.OrdinalIgnoreCase) ? "powershell" : "executable",
-                        Executable = exePath,
-                        Arguments = args,
-                        RunAsAdmin = runAdmin,
-                        ConsoleVisibility = "default"
-                    },
-                    Rules = new ContextRulesConfig
-                    {
-                        ShowOnFiles = showFile,
-                        ShowOnFolders = showDir,
-                        ShowOnBackground = showBg
-                    }
-                });
-                imported++;
-            }
+            if (!File.Exists(path)) return null;
+            var json = File.ReadAllText(path);
+            var cfg = JsonSerializer.Deserialize<AppConfig>(json, JsonOptions);
+            return cfg is { Items.Count: > 0 } ? cfg : null;
         }
-        catch { }
-        return imported;
+        catch
+        {
+            return null;
+        }
     }
 
     public static async Task<RegistrationHealth> QueryHealthAsync()

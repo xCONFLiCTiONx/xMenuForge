@@ -174,7 +174,8 @@
                                         <Button Content="+ New Custom Command" Style="{StaticResource PrimaryButton}" Margin="0,0,10,6" Click="QuickNewCustom_Click"/>
                                         <Button Content="Open Menu Designer" Style="{StaticResource SecondaryButton}" Margin="0,0,10,6" Click="QuickOpenDesigner_Click"/>
                                         <Button Content="Register / Repair Explorer" Style="{StaticResource SecondaryButton}" Margin="0,0,10,6" Click="RegisterExplorer_Click"/>
-                                        <Button Content="Import from xToolsMenu" Style="{StaticResource SecondaryButton}" Margin="0,0,10,6" Click="ImportXToolsMenu_Click"/>
+                                        <Button Content="Backup Settings" Style="{StaticResource SecondaryButton}" Margin="0,0,10,6" Click="ExportConfig_Click"/>
+                                        <Button Content="Restore Backup" Style="{StaticResource SecondaryButton}" Margin="0,0,10,6" Click="ImportBackup_Click"/>
                                     </WrapPanel>
                                 </StackPanel>
                             </Border>
@@ -631,10 +632,13 @@
 
                             <Border Style="{StaticResource CardBorder}" Margin="0,0,0,14">
                                 <StackPanel>
-                                    <TextBlock Text="Migration from xToolsMenu" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,6"/>
-                                    <TextBlock Text="Import your existing custom commands from HKCU\Software\xToolsMenu\CustomCommands into xMenuForge's versioned config.json."
+                                    <TextBlock Text="Settings Backup &amp; Restore" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                                    <TextBlock Text="Export your complete menu layout, custom commands, rules, and preferences to a JSON backup file, or restore a previous backup at any time."
                                                TextWrapping="Wrap" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,12"/>
-                                    <Button Content="Import xToolsMenu Custom Commands" Style="{StaticResource SecondaryButton}" HorizontalAlignment="Left" Click="ImportXToolsMenu_Click"/>
+                                    <WrapPanel>
+                                        <Button Content="Backup Settings..." Style="{StaticResource PrimaryButton}" Margin="0,0,10,6" Click="ExportConfig_Click"/>
+                                        <Button Content="Restore Backup..." Style="{StaticResource SecondaryButton}" Margin="0,0,10,6" Click="ImportBackup_Click"/>
+                                    </WrapPanel>
                                 </StackPanel>
                             </Border>
                         </StackPanel>
@@ -656,7 +660,8 @@
                                 <Button Content="Refresh Health" Style="{StaticResource SecondaryButton}" Margin="0,0,8,0" Click="RefreshHealth_Click"/>
                                 <Button Content="Open Data Folder" Style="{StaticResource SecondaryButton}" Margin="0,0,8,0" Click="OpenDataFolder_Click"/>
                                 <Button Content="Reset Defaults" Style="{StaticResource DangerButton}" Margin="0,0,8,0" Click="ResetDefaults_Click"/>
-                                <Button Content="Export Config" Style="{StaticResource SecondaryButton}" Click="ExportConfig_Click"/>
+                                <Button Content="Backup Settings" Style="{StaticResource SecondaryButton}" Margin="0,0,8,0" Click="ExportConfig_Click"/>
+                                <Button Content="Restore Backup" Style="{StaticResource SecondaryButton}" Click="ImportBackup_Click"/>
                             </StackPanel>
                         </DockPanel>
 

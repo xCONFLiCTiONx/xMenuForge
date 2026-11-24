@@ -973,8 +973,8 @@ public:
     IFACEMETHODIMP QueryContextMenu(HMENU hmenu, UINT indexMenu, UINT idCmdFirst, UINT idCmdLast, UINT uFlags) override {
         if (uFlags & CMF_DEFAULTONLY) return MAKE_HRESULT(SEVERITY_SUCCESS, FACILITY_NULL, 0);
 
-        config_ = xmf::LoadConfig();
-        if (!config_.integrations.classicContextMenuEnabled) {
+        config_ = GetCachedConfig();
+        if (!config_ || !config_->integrations.classicContextMenuEnabled) {
             return MAKE_HRESULT(SEVERITY_SUCCESS, FACILITY_NULL, 0);
         }
 
@@ -984,37 +984,50 @@ public:
             if (b) DeleteObject(b);
         }
         bitmaps_.clear();
-        commandIds_.clear();
+        actions_.clear();
 
         UINT nextOffset = 0;
-        HMENU rootSub = BuildSubmenu(L"", idCmdFirst, idCmdLast, nextOffset);
-        if (!rootSub) return MAKE_HRESULT(SEVERITY_SUCCESS, FACILITY_NULL, 0);
+        bool singleRoot = (config_->appearance.modernSubmenuMode == L"single_root" ||
+                           config_->appearance.modernSubmenuMode == L"flyout");
 
-        std::wstring rootTitle = config_.appearance.rootMenuTitle.empty() ? L"xMenuForge" : config_.appearance.rootMenuTitle;
-        MENUITEMINFOW mii{};
-        mii.cbSize = sizeof(mii);
-        mii.fMask = MIIM_SUBMENU | MIIM_STRING | MIIM_ID;
-        mii.wID = idCmdFirst + nextOffset++;
-        mii.hSubMenu = rootSub;
-        mii.dwTypeData = rootTitle.data();
+        if (singleRoot) {
+            HMENU rootSub = BuildSubmenu(L"", idCmdFirst, idCmdLast, nextOffset);
+            if (!rootSub) return MAKE_HRESULT(SEVERITY_SUCCESS, FACILITY_NULL, 0);
 
-        if (config_.appearance.showIcons) {
-            std::wstring iconPath = xmf::ResolveIconPath(config_.appearance.rootMenuIcon, config_.appearance, g_hModule);
-            if (HBITMAP bmp = LoadMenuIconBitmap(iconPath)) {
-                mii.fMask |= MIIM_BITMAP;
-                mii.hbmpItem = bmp;
-                bitmaps_.push_back(bmp);
+            std::wstring rootTitle = config_->appearance.rootMenuTitle.empty() ? L"xMenuForge" : config_->appearance.rootMenuTitle;
+            MENUITEMINFOW mii{};
+            mii.cbSize = sizeof(mii);
+            mii.fMask = MIIM_SUBMENU | MIIM_STRING | MIIM_ID;
+            mii.wID = idCmdFirst + nextOffset++;
+            mii.hSubMenu = rootSub;
+            mii.dwTypeData = rootTitle.data();
+            actions_.push_back({});
+
+            if (config_->appearance.showIcons) {
+                std::wstring iconPath = ResolveIconPathCached(config_->appearance.rootMenuIcon, config_->appearance);
+                if (HBITMAP bmp = LoadMenuIconBitmap(iconPath)) {
+                    mii.fMask |= MIIM_BITMAP;
+                    mii.hbmpItem = bmp;
+                    bitmaps_.push_back(bmp);
+                }
             }
+            InsertMenuItemW(hmenu, indexMenu, TRUE, &mii);
+        } else {
+            // Direct Root mode: exact 1:1 mirror of the Windows 11 top-level menu
+            UINT pos = indexMenu;
+            PopulateMenu(hmenu, pos, L"", idCmdFirst, idCmdLast, nextOffset);
+            if (nextOffset == 0) return MAKE_HRESULT(SEVERITY_SUCCESS, FACILITY_NULL, 0);
         }
-        InsertMenuItemW(hmenu, indexMenu, TRUE, &mii);
+
         return MAKE_HRESULT(SEVERITY_SUCCESS, FACILITY_NULL, nextOffset);
     }
 
     IFACEMETHODIMP InvokeCommand(LPCMINVOKECOMMANDINFO lpici) override {
         if (HIWORD(lpici->lpVerb) != 0) return E_INVALIDARG;
         UINT offset = LOWORD(lpici->lpVerb);
-        if (offset < commandIds_.size() && !commandIds_[offset].empty()) {
-            LaunchHost(L"--invoke", commandIds_[offset], ctx_);
+        if (offset < actions_.size() && !actions_[offset].payload.empty()) {
+            const auto& act = actions_[offset];
+            LaunchHost(act.isDirectEditor ? L"--open-editor" : L"--invoke", act.payload, ctx_);
             return S_OK;
         }
         return E_INVALIDARG;
@@ -1025,12 +1038,46 @@ public:
     }
 
 private:
-    HMENU BuildSubmenu(const std::wstring& parentId, UINT idCmdFirst, UINT idCmdLast, UINT& nextOffset) {
-        auto children = xmf::GetVisibleChildren(config_, parentId, ctx_);
-        if (children.empty()) return nullptr;
+    struct ClassicAction {
+        bool isDirectEditor = false;
+        std::wstring payload;
+    };
+
+    HMENU BuildEditWithSubmenu(UINT idCmdFirst, UINT idCmdLast, UINT& nextOffset) {
+        auto editors = SlotCommand::DiscoverInstalledEditors();
+        if (editors.empty()) return nullptr;
 
         HMENU sub = CreatePopupMenu();
         UINT pos = 0;
+        for (const auto& ed : editors) {
+            if (idCmdFirst + nextOffset >= idCmdLast) break;
+            std::wstring title = ed.first;
+            MENUITEMINFOW mii{};
+            mii.cbSize = sizeof(mii);
+            mii.fMask = MIIM_STRING | MIIM_ID;
+            mii.wID = idCmdFirst + nextOffset++;
+            mii.dwTypeData = title.data();
+            actions_.push_back({true, ed.second});
+
+            if (config_->appearance.showIcons) {
+                if (HBITMAP bmp = LoadMenuIconBitmap(ed.second + L",0")) {
+                    mii.fMask |= MIIM_BITMAP;
+                    mii.hbmpItem = bmp;
+                    bitmaps_.push_back(bmp);
+                }
+            }
+            InsertMenuItemW(sub, pos++, TRUE, &mii);
+        }
+        if (pos == 0) {
+            DestroyMenu(sub);
+            return nullptr;
+        }
+        return sub;
+    }
+
+    UINT PopulateMenu(HMENU targetMenu, UINT& pos, const std::wstring& parentId, UINT idCmdFirst, UINT idCmdLast, UINT& nextOffset) {
+        auto children = xmf::GetVisibleChildren(*config_, parentId, ctx_);
+        UINT added = 0;
         for (const auto* item : children) {
             if (idCmdFirst + nextOffset >= idCmdLast) break;
             if (item->kind == xmf::ItemKind::Separator) {
@@ -1038,7 +1085,8 @@ private:
                 mii.cbSize = sizeof(mii);
                 mii.fMask = MIIM_FTYPE;
                 mii.fType = MFT_SEPARATOR;
-                InsertMenuItemW(sub, pos++, TRUE, &mii);
+                InsertMenuItemW(targetMenu, pos++, TRUE, &mii);
+                ++added;
             } else if (item->kind == xmf::ItemKind::Category) {
                 HMENU nested = BuildSubmenu(item->id, idCmdFirst, idCmdLast, nextOffset);
                 if (!nested) continue;
@@ -1049,16 +1097,38 @@ private:
                 mii.wID = idCmdFirst + nextOffset++;
                 mii.hSubMenu = nested;
                 mii.dwTypeData = title.data();
-                commandIds_.push_back(L"");
-                if (config_.appearance.showIcons) {
-                    std::wstring iconPath = xmf::ResolveIconPath(item->icon, config_.appearance, g_hModule);
+                actions_.push_back({});
+                if (config_->appearance.showIcons) {
+                    std::wstring iconPath = ResolveIconPathCached(item->icon, config_->appearance);
                     if (HBITMAP bmp = LoadMenuIconBitmap(iconPath)) {
                         mii.fMask |= MIIM_BITMAP;
                         mii.hbmpItem = bmp;
                         bitmaps_.push_back(bmp);
                     }
                 }
-                InsertMenuItemW(sub, pos++, TRUE, &mii);
+                InsertMenuItemW(targetMenu, pos++, TRUE, &mii);
+                ++added;
+            } else if (item->builtIn && item->builtInAction == L"edit_with") {
+                HMENU edSub = BuildEditWithSubmenu(idCmdFirst, idCmdLast, nextOffset);
+                if (!edSub) continue;
+                std::wstring title = item->title;
+                MENUITEMINFOW mii{};
+                mii.cbSize = sizeof(mii);
+                mii.fMask = MIIM_SUBMENU | MIIM_STRING | MIIM_ID;
+                mii.wID = idCmdFirst + nextOffset++;
+                mii.hSubMenu = edSub;
+                mii.dwTypeData = title.data();
+                actions_.push_back({});
+                if (config_->appearance.showIcons) {
+                    std::wstring iconPath = ResolveIconPathCached(item->icon, config_->appearance);
+                    if (HBITMAP bmp = LoadMenuIconBitmap(iconPath)) {
+                        mii.fMask |= MIIM_BITMAP;
+                        mii.hbmpItem = bmp;
+                        bitmaps_.push_back(bmp);
+                    }
+                }
+                InsertMenuItemW(targetMenu, pos++, TRUE, &mii);
+                ++added;
             } else {
                 std::wstring title = item->title;
                 MENUITEMINFOW mii{};
@@ -1066,19 +1136,26 @@ private:
                 mii.fMask = MIIM_STRING | MIIM_ID;
                 mii.wID = idCmdFirst + nextOffset++;
                 mii.dwTypeData = title.data();
-                commandIds_.push_back(item->id);
-                if (config_.appearance.showIcons) {
-                    std::wstring iconPath = xmf::ResolveIconPath(item->icon, config_.appearance, g_hModule);
+                actions_.push_back({false, item->id});
+                if (config_->appearance.showIcons) {
+                    std::wstring iconPath = ResolveIconPathCached(item->icon, config_->appearance);
                     if (HBITMAP bmp = LoadMenuIconBitmap(iconPath)) {
                         mii.fMask |= MIIM_BITMAP;
                         mii.hbmpItem = bmp;
                         bitmaps_.push_back(bmp);
                     }
                 }
-                InsertMenuItemW(sub, pos++, TRUE, &mii);
+                InsertMenuItemW(targetMenu, pos++, TRUE, &mii);
+                ++added;
             }
         }
-        if (pos == 0) {
+        return added;
+    }
+
+    HMENU BuildSubmenu(const std::wstring& parentId, UINT idCmdFirst, UINT idCmdLast, UINT& nextOffset) {
+        HMENU sub = CreatePopupMenu();
+        UINT pos = 0;
+        if (PopulateMenu(sub, pos, parentId, idCmdFirst, idCmdLast, nextOffset) == 0) {
             DestroyMenu(sub);
             return nullptr;
         }
@@ -1087,8 +1164,8 @@ private:
 
     std::atomic_ulong refs_{1};
     xmf::SelectionContext ctx_;
-    xmf::AppConfig config_;
-    std::vector<std::wstring> commandIds_;
+    std::shared_ptr<const xmf::AppConfig> config_;
+    std::vector<ClassicAction> actions_;
     std::vector<HBITMAP> bitmaps_;
 };
 
