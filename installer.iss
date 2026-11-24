@@ -8,7 +8,7 @@ AppId={{7A4E9C10-5B2D-4F81-A310-9C6E2B410001}
 AppName={#AppName}
 AppVersion={#AppVersion}
 AppPublisher={#AppPublisher}
-DefaultDirName={localappdata}\Programs\{#AppName}
+DefaultDirName={autopf}\{#AppName}
 DefaultGroupName={#AppName}
 UninstallDisplayIcon={app}\xMenuForge.ico
 OutputDir=dist
@@ -18,7 +18,7 @@ Compression=lzma2
 SolidCompression=yes
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
-PrivilegesRequired=lowest
+PrivilegesRequired=admin
 CloseApplications=yes
 
 [Languages]

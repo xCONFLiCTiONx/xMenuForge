@@ -170,6 +170,7 @@ bool RegisterAll(const std::wstring& installDir, bool enableClassic, bool restar
     std::wstring psOut;
     std::wstring script =
         L"$ProgressPreference='SilentlyContinue'; "
+        L"Restart-Service AppXSvc -Force -ErrorAction SilentlyContinue; "
         L"Get-AppxPackage -Name '" + std::wstring(kPackageName) + L"' -ErrorAction SilentlyContinue | Remove-AppxPackage -ErrorAction SilentlyContinue; "
         L"Add-AppxPackage -Register -ForceUpdateFromAnyVersion -Path '" + manifestPath.wstring() + L"' -ExternalLocation '" + dir.wstring() + L"'";
     bool ok = RunPowerShell(script, psOut);

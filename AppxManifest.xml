@@ -13,8 +13,7 @@
   <Identity
     Name="xCONFLiCTiONx.xMenuForge"
     Publisher="CN=xCONFLiCTiONx"
-    Version="1.0.0.0"
-    ProcessorArchitecture="x64" />
+    Version="1.0.0.0" />
 
   <Properties>
     <DisplayName>xMenuForge</DisplayName>
@@ -28,13 +27,9 @@
   <Dependencies>
     <TargetDeviceFamily
       Name="Windows.Desktop"
-      MinVersion="10.0.22000.0"
+      MinVersion="10.0.19041.0"
       MaxVersionTested="10.0.26100.0" />
   </Dependencies>
-
-  <Resources>
-    <Resource Language="en-us" />
-  </Resources>
 
   <Capabilities>
     <rescap:Capability Name="runFullTrust" />
@@ -51,7 +46,7 @@
         DisplayName="xMenuForge"
         Description="Customizable Windows 11 context menu platform"
         BackgroundColor="#0E1015"
-        Square150x150Logo="Assets\Square150x150Logo.png"
+        Square150x150Logo="Assets\StoreLogo.png"
         Square44x44Logo="Assets\Square44x44Logo.png">
         <uap:DefaultTile Wide310x150Logo="Assets\Wide310x150Logo.png" />
       </uap:VisualElements>
@@ -59,7 +54,7 @@
       <Extensions>
         <com:Extension Category="windows.comServer">
           <com:ComServer>
-            <com:SurrogateServer DisplayName="xMenuForge Shell Extension">
+            <com:SurrogateServer>
               <com:Class
                 Id="7A4E9C10-5B2D-4F81-A310-9C6E2B410001"
                 Path="xMenuForge.Shell.dll"

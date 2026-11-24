@@ -6,7 +6,7 @@ param(
     [switch]$EnableClassicMenu,
     [switch]$RestartExplorer,
     [switch]$BuildInstaller,
-    [string]$InstallDir = "$env:LOCALAPPDATA\Programs\xMenuForge"
+    [string]$InstallDir = "$env:ProgramFiles\xMenuForge"
 )
 
 $ErrorActionPreference = "Stop"
