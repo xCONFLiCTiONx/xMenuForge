@@ -561,6 +561,34 @@ public partial class MainWindow : Window
         RefreshDesignerList();
     }
 
+    private void DesignerRename_Click(object sender, RoutedEventArgs e)
+    {
+        var sel = GetSelectedDesignerItem();
+        if (sel == null || sel.Kind == "separator") return;
+        var newName = DarkDialog.Prompt(this, "Rename Item", $"Enter a new display name for '{sel.Title}':", sel.Title);
+        if (string.IsNullOrWhiteSpace(newName) || newName.Trim() == sel.Title) return;
+        sel.Title = newName.Trim();
+        SaveConfigWithFeedback($"Renamed to '{sel.Title}'");
+        RefreshDesignerList();
+        RefreshBuiltInCommands();
+        RefreshCustomCommandsList();
+        RefreshRulesCommandList();
+    }
+
+    private void DesignerList_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+    {
+        DesignerRename_Click(sender, e);
+    }
+
+    private void DesignerList_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.F2)
+        {
+            DesignerRename_Click(sender, e);
+            e.Handled = true;
+        }
+    }
+
     private void DesignerToggleEnabled_Click(object sender, RoutedEventArgs e)
     {
         var selected = GetSelectedDesignerItems();
@@ -745,6 +773,7 @@ public partial class MainWindow : Window
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
             var left = new StackPanel();
             left.Children.Add(new TextBlock { Text = item.Title, FontWeight = FontWeights.SemiBold, FontSize = 13.5 });
@@ -757,6 +786,27 @@ public partial class MainWindow : Window
             });
             Grid.SetColumn(left, 0);
             grid.Children.Add(left);
+
+            var renameBtn = new Button
+            {
+                Content = "Rename",
+                Style = (Style)FindResource("SecondaryButton"),
+                Padding = new Thickness(10, 4, 10, 4),
+                Margin = new Thickness(8, 0, 0, 0),
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            renameBtn.Click += (_, _) =>
+            {
+                var newName = DarkDialog.Prompt(this, "Rename Command", $"Enter a new display name for '{item.Title}':", item.Title);
+                if (string.IsNullOrWhiteSpace(newName) || newName.Trim() == item.Title) return;
+                item.Title = newName.Trim();
+                SaveConfigWithFeedback($"Renamed to '{item.Title}'");
+                RefreshBuiltInCommands();
+                RefreshDesignerList();
+                RefreshRulesCommandList();
+            };
+            Grid.SetColumn(renameBtn, 1);
+            grid.Children.Add(renameBtn);
 
             var modCombo = new ComboBox { Width = 128, Margin = new Thickness(10, 0, 14, 0), VerticalAlignment = VerticalAlignment.Center, ToolTip = "Modifier key required to show this command" };
             modCombo.Items.Add(new ComboBoxItem { Content = "Always", Tag = "none" });
@@ -774,7 +824,7 @@ public partial class MainWindow : Window
                     RefreshDesignerList();
                 }
             };
-            Grid.SetColumn(modCombo, 1);
+            Grid.SetColumn(modCombo, 2);
             grid.Children.Add(modCombo);
 
             var toggle = new CheckBox
@@ -785,7 +835,7 @@ public partial class MainWindow : Window
             };
             toggle.Checked += (_, _) => { item.Enabled = true; SaveConfigWithFeedback($"Enabled {item.Title}"); };
             toggle.Unchecked += (_, _) => { item.Enabled = false; SaveConfigWithFeedback($"Disabled {item.Title}"); };
-            Grid.SetColumn(toggle, 2);
+            Grid.SetColumn(toggle, 3);
             grid.Children.Add(toggle);
 
             card.Child = grid;
