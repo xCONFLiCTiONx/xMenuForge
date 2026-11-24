@@ -391,15 +391,18 @@
                                             </StackPanel>
                                         </Grid>
 
-                                        <TextBlock Text="Icon Path (optional — .ico or .exe)" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,4"/>
+                                        <TextBlock Text="Icon Path (optional — .ico, .exe, or dll,index)" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,4"/>
                                         <Grid Margin="0,0,0,10">
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="*"/>
                                                 <ColumnDefinition Width="8"/>
                                                 <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="8"/>
+                                                <ColumnDefinition Width="Auto"/>
                                             </Grid.ColumnDefinitions>
                                             <TextBox x:Name="CustomIconBox" Grid.Column="0"/>
-                                            <Button Content="Browse..." Style="{StaticResource SecondaryButton}" Grid.Column="2" Click="CustomBrowseIcon_Click"/>
+                                            <Button Content="Random" Style="{StaticResource SecondaryButton}" Grid.Column="2" Click="CustomRandomIcon_Click" ToolTip="Pick a random colorful Windows 11 icon"/>
+                                            <Button Content="Browse..." Style="{StaticResource SecondaryButton}" Grid.Column="4" Click="CustomBrowseIcon_Click"/>
                                         </Grid>
 
                                         <WrapPanel Margin="0,4,0,12">

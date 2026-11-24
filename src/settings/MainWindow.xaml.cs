@@ -452,6 +452,50 @@ public partial class MainWindow : Window
         }
     }
 
+    private static readonly string[] ColorfulRandomIcons =
+    [
+        @"C:\Windows\System32\imageres.dll,3",
+        @"C:\Windows\System32\imageres.dll,15",
+        @"C:\Windows\System32\imageres.dll,16",
+        @"C:\Windows\System32\imageres.dll,20",
+        @"C:\Windows\System32\imageres.dll,45",
+        @"C:\Windows\System32\imageres.dll,54",
+        @"C:\Windows\System32\imageres.dll,56",
+        @"C:\Windows\System32\imageres.dll,64",
+        @"C:\Windows\System32\imageres.dll,67",
+        @"C:\Windows\System32\imageres.dll,77",
+        @"C:\Windows\System32\imageres.dll,89",
+        @"C:\Windows\System32\imageres.dll,90",
+        @"C:\Windows\System32\imageres.dll,102",
+        @"C:\Windows\System32\imageres.dll,108",
+        @"C:\Windows\System32\imageres.dll,114",
+        @"C:\Windows\System32\imageres.dll,139",
+        @"C:\Windows\System32\imageres.dll,165",
+        @"C:\Windows\System32\imageres.dll,166",
+        @"C:\Windows\System32\imageres.dll,168",
+        @"C:\Windows\System32\imageres.dll,174",
+        @"C:\Windows\System32\imageres.dll,183",
+        @"C:\Windows\System32\imageres.dll,262",
+        @"C:\Windows\System32\imageres.dll,268",
+        @"C:\Windows\System32\imageres.dll,272",
+        @"C:\Windows\System32\imageres.dll,297",
+        @"C:\Windows\System32\shell32.dll,13",
+        @"C:\Windows\System32\shell32.dll,21",
+        @"C:\Windows\System32\shell32.dll,43",
+        @"C:\Windows\System32\shell32.dll,71",
+        @"C:\Windows\System32\shell32.dll,137",
+        @"C:\Windows\System32\shell32.dll,167"
+    ];
+
+    private static string PickRandomColorfulIcon(string? exclude = null)
+    {
+        var pool = string.IsNullOrWhiteSpace(exclude)
+            ? ColorfulRandomIcons
+            : ColorfulRandomIcons.Where(i => !string.Equals(i, exclude, StringComparison.OrdinalIgnoreCase)).ToArray();
+        if (pool.Length == 0) pool = ColorfulRandomIcons;
+        return pool[Random.Shared.Next(pool.Length)];
+    }
+
     private void DesignerAddCategory_Click(object sender, RoutedEventArgs e)
     {
         var name = DarkDialog.Prompt(this, "New Category", "Enter a name for the submenu category:", "Developer Tools");
@@ -461,7 +505,7 @@ public partial class MainWindow : Window
             Id = "cat." + Guid.NewGuid().ToString("N")[..8],
             Kind = "category",
             Title = name.Trim(),
-            Icon = @"Icons\System Folders.ico",
+            Icon = PickRandomColorfulIcon(),
             Order = _config.Items.Count
         };
         _config.Items.Add(cat);
@@ -905,6 +949,7 @@ public partial class MainWindow : Window
             BuiltIn = false,
             Enabled = true,
             Title = "New Custom Command",
+            Icon = PickRandomColorfulIcon(),
             Order = _config.Items.Count,
             Runner = new RunnerConfig { Type = "powershell", Executable = "Write-Host 'Selected:' {path}", ConsoleVisibility = "show" },
             Rules = new ContextRulesConfig { ShowOnFiles = true, ShowOnFolders = true, ShowOnBackground = true }
@@ -970,7 +1015,21 @@ public partial class MainWindow : Window
     private void CustomBrowseExe_Click(object sender, RoutedEventArgs e)
     {
         var dlg = new OpenFileDialog { Filter = "Executables & Scripts|*.exe;*.ps1;*.bat;*.cmd|All Files|*.*" };
-        if (dlg.ShowDialog() == true) CustomExeBox.Text = dlg.FileName;
+        if (dlg.ShowDialog() == true)
+        {
+            CustomExeBox.Text = dlg.FileName;
+            if (dlg.FileName.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) &&
+                (string.IsNullOrWhiteSpace(CustomIconBox.Text) ||
+                 ColorfulRandomIcons.Any(i => string.Equals(i, CustomIconBox.Text.Trim(), StringComparison.OrdinalIgnoreCase))))
+            {
+                CustomIconBox.Text = dlg.FileName + ",0";
+            }
+        }
+    }
+
+    private void CustomRandomIcon_Click(object sender, RoutedEventArgs e)
+    {
+        CustomIconBox.Text = PickRandomColorfulIcon(CustomIconBox.Text.Trim());
     }
 
     private void CustomBrowseIcon_Click(object sender, RoutedEventArgs e)
