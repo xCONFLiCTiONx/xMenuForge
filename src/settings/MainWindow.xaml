@@ -216,7 +216,6 @@
                                 <ComboBoxItem Content="Key: Hold Ctrl" Tag="ctrl"/>
                                 <ComboBoxItem Content="Key: Hold Alt" Tag="alt"/>
                                 <ComboBoxItem Content="Key: Ctrl + Alt" Tag="ctrl_alt"/>
-                                <ComboBoxItem Content="Key: Hold Win" Tag="win"/>
                             </ComboBox>
                             <Button Content="Delete" Style="{StaticResource DangerButton}" Click="DesignerDelete_Click"/>
                         </WrapPanel>
@@ -260,7 +259,6 @@
                                                 <ComboBoxItem Content="Hold Ctrl" Tag="ctrl"/>
                                                 <ComboBoxItem Content="Hold Alt" Tag="alt"/>
                                                 <ComboBoxItem Content="Hold Ctrl + Alt" Tag="ctrl_alt"/>
-                                                <ComboBoxItem Content="Hold Win" Tag="win"/>
                                             </ComboBox>
                                         </Grid>
                                     </StackPanel>
@@ -426,7 +424,6 @@
                                                     <ComboBoxItem Content="Hold Ctrl" Tag="ctrl"/>
                                                     <ComboBoxItem Content="Hold Alt" Tag="alt"/>
                                                     <ComboBoxItem Content="Hold Ctrl + Alt" Tag="ctrl_alt"/>
-                                                    <ComboBoxItem Content="Hold Win" Tag="win"/>
                                                 </ComboBox>
                                             </StackPanel>
                                         </Grid>
@@ -592,9 +589,8 @@
                                             <ComboBoxItem Content="Hold Ctrl" Tag="ctrl"/>
                                             <ComboBoxItem Content="Hold Alt" Tag="alt"/>
                                             <ComboBoxItem Content="Hold Ctrl + Alt" Tag="ctrl_alt"/>
-                                            <ComboBoxItem Content="Hold Win" Tag="win"/>
                                         </ComboBox>
-                                        <TextBlock Text="Hold Ctrl, Alt, Ctrl + Alt, or Win while right-clicking to reveal hidden items right inside the Windows 11 Modern context menu."
+                                        <TextBlock Text="Hold Ctrl, Alt, or Ctrl + Alt while right-clicking to reveal hidden items right inside the Windows 11 Modern context menu."
                                                    FontSize="11" Foreground="{StaticResource TextMutedBrush}" TextWrapping="Wrap" Margin="0,0,0,14"/>
 
                                         <TextBlock Text="Specific File Extensions (comma-separated, e.g. .ps1, .json, .cpp)" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,6"/>

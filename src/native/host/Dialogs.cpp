@@ -314,6 +314,30 @@ static void WriteExplorerAdvancedBool(const wchar_t* name, DWORD value) {
     }
 }
 
+static void ApplyExplorerVisibility(bool showHidden, bool showSuperHidden) {
+    WriteExplorerAdvancedBool(L"Hidden", showHidden ? 1 : 2);
+    WriteExplorerAdvancedBool(L"ShowSuperHidden", showSuperHidden ? 1 : 0);
+
+    SHELLSTATEW ss{};
+    ss.fShowAllObjects = showHidden ? TRUE : FALSE;
+    ss.fShowSuperHidden = showSuperHidden ? TRUE : FALSE;
+    SHGetSetSettings(&ss, SSF_SHOWALLOBJECTS | SSF_SHOWSUPERHIDDEN, TRUE);
+
+    SendMessageTimeoutW(HWND_BROADCAST, WM_SETTINGCHANGE, 0, reinterpret_cast<LPARAM>(L"ShellState"), SMTO_ABORTIFHUNG, 1000, nullptr);
+    SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
+
+    // Refresh Desktop and open Explorer windows immediately
+    EnumWindows([](HWND h, LPARAM) -> BOOL {
+        WCHAR cls[64]{};
+        GetClassNameW(h, cls, 64);
+        if (wcscmp(cls, L"CabinetWClass") == 0 || wcscmp(cls, L"ExploreWClass") == 0 ||
+            wcscmp(cls, L"Progman") == 0 || wcscmp(cls, L"WorkerW") == 0) {
+            PostMessageW(h, WM_COMMAND, 41504, 0); // FCIDM_SHVIEW_REFRESH
+        }
+        return TRUE;
+    }, 0);
+}
+
 static LRESULT CALLBACK AttrWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     auto* st = reinterpret_cast<AttrDialogState*>(GetWindowLongPtrW(hwnd, GWLP_USERDATA));
     switch (msg) {
@@ -346,10 +370,10 @@ static LRESULT CALLBACK AttrWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
                                                            : std::to_wstring(st->paths.size()) + L" items selected");
         mkLabel(header.c_str(), 18, 14, 380, 22, true);
 
-        mkLabel(L"File & Folder Attributes", 18, 44, 240, 18, true);
-        st->chkHidden = mkCheck(L"Hidden", IDC_CHK_HIDDEN, 24, 68, 120, 22, st->paths.size() > 1);
-        st->chkSystem = mkCheck(L"System (Super-Hidden)", IDC_CHK_SYSTEM, 150, 68, 180, 22, st->paths.size() > 1);
-        st->chkReadOnly = mkCheck(L"Read-Only", IDC_CHK_READONLY, 24, 94, 120, 22, st->paths.size() > 1);
+        mkLabel(L"File && Folder Attributes", 18, 44, 300, 18, true);
+        st->chkHidden = mkCheck(L"Hidden", IDC_CHK_HIDDEN, 24, 68, 130, 22, st->paths.size() > 1);
+        st->chkSystem = mkCheck(L"System (Super-Hidden)", IDC_CHK_SYSTEM, 164, 68, 220, 22, st->paths.size() > 1);
+        st->chkReadOnly = mkCheck(L"Read-Only", IDC_CHK_READONLY, 24, 96, 130, 22, st->paths.size() > 1);
 
         if (!st->paths.empty()) {
             bool allH = true, someH = false, allS = true, someS = false, allR = true, someR = false;
@@ -441,6 +465,12 @@ static LRESULT CALLBACK AttrWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
             DestroyWindow(hwnd);
             return 0;
         }
+        if ((id == IDC_CHK_SHOW_HIDDEN || id == IDC_CHK_SHOW_SYS) && HIWORD(wParam) == BN_CLICKED && st) {
+            bool showHidden = SendMessageW(st->chkShowHidden, BM_GETCHECK, 0, 0) == BST_CHECKED;
+            bool showSys = SendMessageW(st->chkShowSys, BM_GETCHECK, 0, 0) == BST_CHECKED;
+            ApplyExplorerVisibility(showHidden, showSys);
+            return 0;
+        }
         if (id == IDC_BTN_APPLY && st) {
             LRESULT hState = SendMessageW(st->chkHidden, BM_GETCHECK, 0, 0);
             LRESULT sState = SendMessageW(st->chkSystem, BM_GETCHECK, 0, 0);
@@ -482,9 +512,7 @@ static LRESULT CALLBACK AttrWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
 
             bool showHidden = SendMessageW(st->chkShowHidden, BM_GETCHECK, 0, 0) == BST_CHECKED;
             bool showSys = SendMessageW(st->chkShowSys, BM_GETCHECK, 0, 0) == BST_CHECKED;
-            WriteExplorerAdvancedBool(L"Hidden", showHidden ? 1 : 2);
-            WriteExplorerAdvancedBool(L"ShowSuperHidden", showSys ? 1 : 0);
-            SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
+            ApplyExplorerVisibility(showHidden, showSys);
             DestroyWindow(hwnd);
             return 0;
         }
@@ -519,12 +547,19 @@ void ShowAttributesDialog(const std::vector<std::wstring>& paths) {
     AttrDialogState state;
     state.paths = paths;
 
-    int w = 420, h = 400;
+    UINT dpi = GetDpiForSystem();
+    if (dpi == 0) dpi = 96;
+    RECT rc{0, 0, MulDiv(416, dpi, 96), MulDiv(366, dpi, 96)};
+    DWORD style = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU;
+    DWORD exStyle = WS_EX_DLGMODALFRAME;
+    AdjustWindowRectExForDpi(&rc, style, FALSE, exStyle, dpi);
+    int w = rc.right - rc.left;
+    int h = rc.bottom - rc.top;
     int sx = (GetSystemMetrics(SM_CXSCREEN) - w) / 2;
     int sy = (GetSystemMetrics(SM_CYSCREEN) - h) / 2;
     HWND hwnd = CreateWindowExW(
-        WS_EX_DLGMODALFRAME, kClass, L"xMenuForge — Attributes",
-        WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU,
+        exStyle, kClass, L"xMenuForge - Attributes",
+        style,
         sx, sy, w, h, nullptr, nullptr, wc.hInstance, &state);
     if (!hwnd) return;
     ShowWindow(hwnd, SW_SHOW);
@@ -730,12 +765,19 @@ void ShowTakeOwnershipDialog(const std::vector<std::wstring>& paths, bool alread
 
     TakeOwnState st;
     st.targets = paths;
-    int w = 452, h = 164;
+    UINT dpi = GetDpiForSystem();
+    if (dpi == 0) dpi = 96;
+    RECT rc{0, 0, MulDiv(436, dpi, 96), MulDiv(130, dpi, 96)};
+    DWORD style = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU;
+    DWORD exStyle = WS_EX_DLGMODALFRAME;
+    AdjustWindowRectExForDpi(&rc, style, FALSE, exStyle, dpi);
+    int w = rc.right - rc.left;
+    int h = rc.bottom - rc.top;
     int sx = (GetSystemMetrics(SM_CXSCREEN) - w) / 2;
     int sy = (GetSystemMetrics(SM_CYSCREEN) - h) / 2;
     HWND hwnd = CreateWindowExW(
-        WS_EX_DLGMODALFRAME, kClass, L"xMenuForge — Take Ownership",
-        WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU,
+        exStyle, kClass, L"xMenuForge - Take Ownership",
+        style,
         sx, sy, w, h, nullptr, nullptr, wc.hInstance, &st);
     if (!hwnd) return;
     ShowWindow(hwnd, SW_SHOW);

@@ -12,7 +12,7 @@ namespace fs = std::filesystem;
 
 namespace xmf::reg {
 
-static constexpr int kSlotCount = 12;
+static constexpr int kSlotCount = 16;
 static constexpr const wchar_t* kPackageName = L"xCONFLiCTiONx.xMenuForge";
 static constexpr const wchar_t* kModernClsid = L"{7A4E9C10-5B2D-4F81-A310-9C6E2B410001}";
 static constexpr const wchar_t* kClassicClsid = L"{7A4E9C10-5B2D-4F81-A310-9C6E2B410002}";

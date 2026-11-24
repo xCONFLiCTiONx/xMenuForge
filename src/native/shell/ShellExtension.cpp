@@ -24,8 +24,8 @@
 namespace {
 
 // Primary Slot 0: {7A4E9C10-5B2D-4F81-A310-9C6E2B410001}
-// Additional Native Top-Level Slots 1..11: {7A4E9C10-5B2D-4F81-A310-9C6E2B410011} .. 001B
-constexpr int kMaxRootSlots = 12;
+// Additional Native Top-Level Slots 1..15: {7A4E9C10-5B2D-4F81-A310-9C6E2B410011} .. 001F
+constexpr int kMaxRootSlots = 16;
 
 constexpr CLSID CLSID_XMenuForgeRoot =
     {0x7a4e9c10, 0x5b2d, 0x4f81, {0xa3, 0x10, 0x9c, 0x6e, 0x2b, 0x41, 0x00, 0x01}};
@@ -152,7 +152,6 @@ void LaunchHost(const std::wstring& modeFlag, const std::wstring& itemId, const 
     if (ctx.isFolder) cmdLine += L" --folder";
     if (ctx.ctrlHeld) cmdLine += L" --ctrl";
     if (ctx.altHeld) cmdLine += L" --alt";
-    if (ctx.winHeld) cmdLine += L" --win";
 
     POINT pt{};
     if (GetCursorPos(&pt)) {
@@ -188,24 +187,17 @@ void LaunchHost(const std::wstring& modeFlag, const std::wstring& itemId, const 
 struct ModifierSnapshot {
     bool ctrl = false;
     bool alt = false;
-    bool win = false;
-
-    static bool IsWinDown() {
-        return ((GetAsyncKeyState(VK_LWIN) & 0x8000) != 0) || ((GetAsyncKeyState(VK_RWIN) & 0x8000) != 0);
-    }
 
     static ModifierSnapshot Capture() {
         ModifierSnapshot m;
         m.ctrl = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
         m.alt = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
-        m.win = IsWinDown();
         return m;
     }
 
     void ApplyTo(xmf::SelectionContext& ctx) const {
         ctx.ctrlHeld = ctrl || ((GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0);
         ctx.altHeld = alt || ((GetAsyncKeyState(VK_MENU) & 0x8000) != 0);
-        ctx.winHeld = win || IsWinDown();
     }
 };
 
@@ -222,6 +214,8 @@ struct LeafSpec {
     std::wstring iconPath;
     std::wstring tooltip;
     bool separatorBefore = false;
+    bool isDirectEditor = false;
+    std::wstring editorExePath;
     xmf::MenuItem itemCopy;
     ModifierSnapshot modifiers;
 };
@@ -286,6 +280,10 @@ public:
     }
     IFACEMETHODIMP GetState(IShellItemArray* items, BOOL, EXPCMDSTATE* state) override {
         if (!state) return E_POINTER;
+        if (spec_.isDirectEditor) {
+            *state = ECS_ENABLED;
+            return S_OK;
+        }
         xmf::SelectionContext ctx = ExtractContext(items, site_);
         spec_.modifiers.ApplyTo(ctx);
         *state = xmf::MatchesContext(spec_.itemCopy, ctx) ? ECS_ENABLED : ECS_HIDDEN;
@@ -294,7 +292,11 @@ public:
     IFACEMETHODIMP Invoke(IShellItemArray* items, IBindCtx*) override {
         xmf::SelectionContext ctx = ExtractContext(items, site_);
         spec_.modifiers.ApplyTo(ctx);
-        LaunchHost(L"--invoke", spec_.id, ctx);
+        if (spec_.isDirectEditor && !spec_.editorExePath.empty()) {
+            LaunchHost(L"--open-editor", spec_.editorExePath, ctx);
+        } else {
+            LaunchHost(L"--invoke", spec_.id, ctx);
+        }
         return S_OK;
     }
     IFACEMETHODIMP GetFlags(EXPCMDFLAGS* flags) override {
@@ -553,12 +555,71 @@ public:
             *flags = ECF_HASSUBCOMMANDS;
             return S_OK;
         }
-        if (boundItem_ && boundItem_->kind == xmf::ItemKind::Category) {
+        if (boundItem_ && (boundItem_->kind == xmf::ItemKind::Category ||
+                           (boundItem_->builtIn && boundItem_->builtInAction == L"edit_with"))) {
             *flags = ECF_HASSUBCOMMANDS;
             return S_OK;
         }
         *flags = ECF_DEFAULT;
         return S_OK;
+    }
+
+    static std::vector<std::pair<std::wstring, std::wstring>> DiscoverInstalledEditors() {
+        std::vector<std::pair<std::wstring, std::wstring>> editors;
+        auto addEditor = [&](const std::wstring& name, const std::wstring& exe) {
+            if (exe.empty() || !PathFileExistsW(exe.c_str())) return;
+            for (const auto& e : editors) {
+                if (_wcsicmp(e.second.c_str(), exe.c_str()) == 0) return;
+            }
+            editors.emplace_back(name, exe);
+        };
+
+        const std::pair<const wchar_t*, const wchar_t*> common[] = {
+            {L"Visual Studio Code", L"code.exe"},
+            {L"Notepad++", L"notepad++.exe"},
+            {L"Sublime Text", L"sublime_text.exe"},
+            {L"Cursor", L"cursor.exe"},
+        };
+        for (const auto& [name, exeName] : common) {
+            WCHAR buf[MAX_PATH] = {};
+            DWORD sz = MAX_PATH;
+            if (SUCCEEDED(AssocQueryStringW(ASSOCF_INIT_BYEXENAME, ASSOCSTR_EXECUTABLE, exeName, nullptr, buf, &sz))) {
+                addEditor(name, buf);
+            } else if (SearchPathW(nullptr, exeName, nullptr, MAX_PATH, buf, nullptr) > 0) {
+                addEditor(name, buf);
+            }
+        }
+
+        // Scan recommended Windows .txt handlers
+        IEnumAssocHandlers* pEnum = nullptr;
+        if (SUCCEEDED(SHAssocEnumHandlers(L".txt", ASSOC_FILTER_RECOMMENDED, &pEnum)) && pEnum) {
+            IAssocHandler* h = nullptr;
+            ULONG fetched = 0;
+            while (pEnum->Next(1, &h, &fetched) == S_OK && fetched == 1) {
+                LPWSTR uiName = nullptr;
+                LPWSTR rawPath = nullptr;
+                if (SUCCEEDED(h->GetUIName(&uiName)) && SUCCEEDED(h->GetName(&rawPath))) {
+                    if (PathFileExistsW(rawPath)) {
+                        addEditor(uiName, rawPath);
+                    } else {
+                        WCHAR resolved[MAX_PATH] = {};
+                        DWORD sz = MAX_PATH;
+                        if (SUCCEEDED(AssocQueryStringW(ASSOCF_INIT_BYEXENAME, ASSOCSTR_EXECUTABLE, rawPath, nullptr, resolved, &sz))) {
+                            addEditor(uiName, resolved);
+                        }
+                    }
+                }
+                if (uiName) CoTaskMemFree(uiName);
+                if (rawPath) CoTaskMemFree(rawPath);
+                h->Release();
+            }
+            pEnum->Release();
+        }
+
+        WCHAR sysDir[MAX_PATH] = {};
+        GetSystemDirectoryW(sysDir, MAX_PATH);
+        addEditor(L"Notepad", std::wstring(sysDir) + L"\\notepad.exe");
+        return editors;
     }
 
     IFACEMETHODIMP EnumSubCommands(IEnumExplorerCommand** commands) override {
@@ -620,6 +681,21 @@ public:
                     pendingSeparator = true;
                 } else {
                     pushLeaf(*it, L"");
+                }
+            }
+        } else if (boundItem_ && boundItem_->builtIn && boundItem_->builtInAction == L"edit_with") {
+            for (const auto& [edName, edExe] : DiscoverInstalledEditors()) {
+                LeafSpec spec;
+                spec.id = L"builtin.edit_with";
+                spec.title = edName;
+                spec.iconPath = edExe + L",0";
+                spec.isDirectEditor = true;
+                spec.editorExePath = edExe;
+                spec.modifiers = modifiers_;
+                auto* cmd = new (std::nothrow) LeafCommand(std::move(spec), config_);
+                if (cmd) {
+                    if (site_) cmd->SetSite(site_);
+                    built.push_back(cmd);
                 }
             }
         } else if (boundItem_ && boundItem_->kind == xmf::ItemKind::Category) {

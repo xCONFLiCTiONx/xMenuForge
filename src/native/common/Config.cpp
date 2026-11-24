@@ -219,53 +219,13 @@ AppConfig CreateDefaultConfig() {
         cfg.items.push_back(std::move(sep));
     };
 
-    // Everyday top-level essentials
+    // Top-level essentials & real native Windows 11 submenus (Edit With, Terminals, System Folders)
     addBuiltIn(L"builtin.attributes", L"Attributes", L"View and modify file attributes and timestamps",
                L"Icons\\Attributes.ico", L"attributes", true, true, true);
-    addBuiltIn(L"builtin.edit_with", L"Edit With...", L"Open selected files in an installed editor",
+    addBuiltIn(L"builtin.edit_with", L"Edit With", L"Open selected files in an installed editor",
                L"Icons\\Edit with.ico", L"edit_with", true, false, false);
 
-    // Clipboard & Copy submenu
-    addCategory(L"cat.clipboard", L"Clipboard & Copy", L"Icons\\Copy Path.ico");
-    addBuiltIn(L"builtin.copy_name", L"Copy Name", L"Copy selected file or folder names to clipboard",
-               L"Icons\\Copy Name.ico", L"copy_name", true, true, false, L"cat.clipboard");
-    addBuiltIn(L"builtin.copy_path", L"Copy Path", L"Copy full paths of selected items to clipboard",
-               L"Icons\\Copy Path.ico", L"copy_path", true, true, false, L"cat.clipboard");
-    addBuiltIn(L"builtin.copy_file_contents", L"Copy File Contents", L"Read file text directly to clipboard",
-               L"C:\\WINDOWS\\System32\\imageres.dll,90", L"copy_file_contents", true, false, false, L"cat.clipboard");
-    addBuiltIn(L"builtin.copy_sha256", L"Copy File Hash (SHA-256)", L"Compute SHA-256 hash natively and copy to clipboard",
-               L"C:\\Windows\\System32\\imageres.dll,77", L"copy_sha256", true, false, false, L"cat.clipboard");
-    addBuiltIn(L"builtin.copy_tree_view", L"Copy Tree View", L"Copy recursive folder tree paths to clipboard",
-               L"C:\\WINDOWS\\System32\\imageres.dll,7", L"copy_tree_view", false, true, true, L"cat.clipboard");
-    addBuiltIn(L"builtin.paste_to_file", L"Paste to File", L"Save clipboard text directly into a file here",
-               L"Icons\\Paste to File.ico", L"paste_to_file", false, false, true, L"cat.clipboard");
-
-    // File & Image Tools submenu
-    addCategory(L"cat.file_tools", L"File & Disk Tools", L"Icons\\Take Ownership.ico");
-    addBuiltIn(L"builtin.unzip_here", L"Unzip Here", L"Extract archive into a subfolder of the same name",
-               L"C:\\WINDOWS\\System32\\imageres.dll,165", L"unzip_here", true, false, false, L"cat.file_tools", L"none", {}, {L".zip"});
-    addBuiltIn(L"builtin.search_clipboard", L"Search Clipboard Name", L"Search folder recursively for the name on your clipboard",
-               L"C:\\WINDOWS\\System32\\imageres.dll,168", L"search_clipboard", false, true, true, L"cat.file_tools");
-    addBuiltIn(L"builtin.flip_image", L"Flip Image Horizontally", L"Flip selected image horizontally in place",
-               L"C:\\WINDOWS\\System32\\imageres.dll,108", L"flip_image", true, false, false, L"cat.file_tools", L"ctrl", {L"Images"});
-    addBuiltIn(L"builtin.create_junction", L"Create Junction...", L"Create an NTFS directory junction to this folder",
-               L"C:\\WINDOWS\\System32\\imageres.dll,166", L"create_junction", false, true, false, L"cat.file_tools", L"ctrl");
-    addBuiltIn(L"builtin.mount_image", L"Mount Disk Image", L"Mount ISO/VHD/VHDX disk image",
-               L"C:\\Windows\\System32\\imageres.dll,56", L"mount_image", true, false, false, L"cat.file_tools", L"ctrl", {L"DiskImages"});
-    addBuiltIn(L"builtin.unmount_image", L"Unmount Disk Image", L"Dismount mounted ISO/VHD/VHDX disk image",
-               L"C:\\Windows\\System32\\imageres.dll,268", L"unmount_image", true, false, false, L"cat.file_tools", L"ctrl", {L"DiskImages"});
-    addBuiltIn(L"builtin.lock_file", L"Lock File (Exclusive)", L"Hold an exclusive file lock until closed",
-               L"C:\\Windows\\System32\\imageres.dll,297", L"lock_file", true, false, false, L"cat.file_tools", L"ctrl");
-    addBuiltIn(L"builtin.lock_check", L"Check File Locks", L"Show processes locking this file via Restart Manager",
-               L"C:\\Windows\\System32\\imageres.dll,54", L"lock_check", true, true, false, L"cat.file_tools", L"ctrl");
-    addBuiltIn(L"builtin.view_sqlite_db", L"View SQLite DB", L"Inspect SQLite database tables via sqlite3",
-               L"C:\\WINDOWS\\System32\\imageres.dll,262", L"view_sqlite_db", true, false, false, L"cat.file_tools", L"ctrl", {}, {L".db", L".sqlite", L".sqlite3"});
-    addBuiltIn(L"builtin.take_ownership", L"Take Ownership", L"Take ownership and grant Full Control recursively",
-               L"Icons\\Take Ownership.ico", L"take_ownership", true, true, false, L"cat.file_tools", L"ctrl");
-
-    addSeparator(L"builtin.sep_terminals");
-
-    // Terminals submenu
+    // Terminals (native Win11 top-level submenu)
     addCategory(L"cat.terminals", L"Terminals", L"Icons\\Terminals.ico");
     addBuiltIn(L"builtin.terminal", L"Windows Terminal", L"Open Windows Terminal in target folder",
                L"Icons\\Terminals.ico", L"terminal", false, true, true, L"cat.terminals");
@@ -280,30 +240,76 @@ AppConfig CreateDefaultConfig() {
     addBuiltIn(L"builtin.cmd_admin", L"Command Prompt (Admin)", L"Open elevated Command Prompt in target folder",
                L"Icons\\Terminals.ico", L"cmd_admin", false, true, true, L"cat.terminals");
 
-    // System & Network submenu
-    addCategory(L"cat.system", L"System & Network", L"Icons\\System Folders.ico");
-    addBuiltIn(L"builtin.system_folders", L"System Folders...", L"Jump to common Windows system directories",
-               L"Icons\\System Folders.ico", L"system_folders", false, false, true, L"cat.system");
-    addBuiltIn(L"builtin.restart_explorer", L"Restart Explorer", L"Restart Windows Explorer cleanly",
-               L"C:\\Windows\\explorer.exe,0", L"restart_explorer", false, false, true, L"cat.system", L"ctrl");
-    addBuiltIn(L"builtin.clear_icon_cache", L"Clear Icon Cache", L"Rebuild Windows icon cache and refresh Explorer",
-               L"C:\\WINDOWS\\System32\\imageres.dll,16", L"clear_icon_cache", false, false, true, L"cat.system", L"alt");
-    addBuiltIn(L"builtin.clear_print_queue", L"Clear Print Queue", L"Stop spooler, clear stuck print jobs, restart spooler",
-               L"C:\\WINDOWS\\System32\\imageres.dll,45", L"clear_print_queue", false, false, true, L"cat.system", L"alt");
-    addBuiltIn(L"builtin.add_to_path", L"Add Folder to System PATH", L"Append selected folder to Machine PATH",
-               L"C:\\WINDOWS\\System32\\imageres.dll,89", L"add_to_path", false, true, true, L"cat.system", L"alt");
-    addBuiltIn(L"builtin.flush_dns", L"Flush DNS", L"Flush Windows DNS resolver cache",
-               L"C:\\WINDOWS\\System32\\imageres.dll,114", L"flush_dns", false, false, true, L"cat.system", L"ctrl_alt");
-    addBuiltIn(L"builtin.ip_renew", L"IP Renew", L"Release & renew DHCP lease and flush DNS",
-               L"C:\\WINDOWS\\System32\\imageres.dll,20", L"ip_renew", false, false, true, L"cat.system", L"alt");
-    addBuiltIn(L"builtin.check_internet", L"Check for Internet", L"Monitor connectivity to 8.8.8.8 and alert when online",
-               L"C:\\WINDOWS\\System32\\imageres.dll,20", L"check_internet", false, false, true, L"cat.system", L"alt");
-    addBuiltIn(L"builtin.ip_watcher", L"IP Watcher", L"Monitor a host or IP for online/offline transitions",
-               L"C:\\WINDOWS\\System32\\imageres.dll,272", L"ip_watcher", false, false, true, L"cat.system", L"alt");
-    addBuiltIn(L"builtin.wifi_passwords", L"WiFi Passwords", L"Display saved Wi-Fi SSIDs and passphrases",
-               L"C:\\WINDOWS\\System32\\imageres.dll,139", L"wifi_passwords", false, false, true, L"cat.system", L"ctrl");
+    // System Folders (native Win11 top-level submenu)
+    addCategory(L"cat.system_folders", L"System Folders", L"Icons\\System Folders.ico");
+    addBuiltIn(L"builtin.sys_startmenu_user", L"Start Menu (User)", L"Open user Start Menu folder",
+               L"Icons\\System Folders.ico", L"sys_startmenu_user", false, false, true, L"cat.system_folders");
+    addBuiltIn(L"builtin.sys_startmenu_all", L"Start Menu (All Users)", L"Open All Users Start Menu folder",
+               L"Icons\\System Folders.ico", L"sys_startmenu_all", false, false, true, L"cat.system_folders");
+    addBuiltIn(L"builtin.sys_temp", L"Temp Folder", L"Open user Temp folder",
+               L"Icons\\System Folders.ico", L"sys_temp", false, false, true, L"cat.system_folders");
+    addBuiltIn(L"builtin.sys_appdata_local", L"AppData (Local)", L"Open Local AppData folder",
+               L"Icons\\System Folders.ico", L"sys_appdata_local", false, false, true, L"cat.system_folders");
+    addBuiltIn(L"builtin.sys_appdata_roaming", L"AppData (Roaming)", L"Open Roaming AppData folder",
+               L"Icons\\System Folders.ico", L"sys_appdata_roaming", false, false, true, L"cat.system_folders");
+    addBuiltIn(L"builtin.sys_programdata", L"ProgramData", L"Open ProgramData folder",
+               L"Icons\\System Folders.ico", L"sys_programdata", false, false, true, L"cat.system_folders");
+    addBuiltIn(L"builtin.sys_startup", L"Startup (User)", L"Open user Startup folder",
+               L"Icons\\System Folders.ico", L"sys_startup", false, false, true, L"cat.system_folders");
 
-    addSeparator(L"builtin.sep_apps");
+    // Flat top-level file/folder/system tools (cleanly filtered by target type & modifier keys)
+    addBuiltIn(L"builtin.copy_name", L"Copy Name", L"Copy selected file or folder names to clipboard",
+               L"Icons\\Copy Name.ico", L"copy_name", true, true, false);
+    addBuiltIn(L"builtin.copy_path", L"Copy Path", L"Copy full paths of selected items to clipboard",
+               L"Icons\\Copy Path.ico", L"copy_path", true, true, false);
+    addBuiltIn(L"builtin.copy_file_contents", L"Copy File Contents", L"Read file text directly to clipboard",
+               L"C:\\WINDOWS\\System32\\imageres.dll,90", L"copy_file_contents", true, false, false);
+    addBuiltIn(L"builtin.copy_sha256", L"Copy File Hash (SHA-256)", L"Compute SHA-256 hash natively and copy to clipboard",
+               L"C:\\Windows\\System32\\imageres.dll,77", L"copy_sha256", true, false, false);
+    addBuiltIn(L"builtin.copy_tree_view", L"Copy Tree View", L"Copy recursive folder tree paths to clipboard",
+               L"C:\\WINDOWS\\System32\\imageres.dll,7", L"copy_tree_view", false, true, true);
+    addBuiltIn(L"builtin.paste_to_file", L"Paste to File", L"Save clipboard text directly into a file here",
+               L"Icons\\Paste to File.ico", L"paste_to_file", false, false, true);
+    addBuiltIn(L"builtin.unzip_here", L"Unzip Here", L"Extract archive into a subfolder of the same name",
+               L"C:\\WINDOWS\\System32\\imageres.dll,165", L"unzip_here", true, false, false, L"", L"none", {}, {L".zip"});
+    addBuiltIn(L"builtin.search_clipboard", L"Search Clipboard Name", L"Search folder recursively for the name on your clipboard",
+               L"C:\\WINDOWS\\System32\\imageres.dll,168", L"search_clipboard", false, true, true);
+
+    // Modifier-gated power tools (Hold Ctrl / Alt / Ctrl+Alt)
+    addBuiltIn(L"builtin.take_ownership", L"Take Ownership", L"Take ownership and grant Full Control recursively",
+               L"Icons\\Take Ownership.ico", L"take_ownership", true, true, false, L"", L"ctrl");
+    addBuiltIn(L"builtin.flip_image", L"Flip Image Horizontally", L"Flip selected image horizontally in place",
+               L"C:\\WINDOWS\\System32\\imageres.dll,108", L"flip_image", true, false, false, L"", L"ctrl", {L"Images"});
+    addBuiltIn(L"builtin.create_junction", L"Create Junction...", L"Create an NTFS directory junction to this folder",
+               L"C:\\WINDOWS\\System32\\imageres.dll,166", L"create_junction", false, true, false, L"", L"ctrl");
+    addBuiltIn(L"builtin.mount_image", L"Mount Disk Image", L"Mount ISO/VHD/VHDX disk image",
+               L"C:\\Windows\\System32\\imageres.dll,56", L"mount_image", true, false, false, L"", L"ctrl", {L"DiskImages"});
+    addBuiltIn(L"builtin.unmount_image", L"Unmount Disk Image", L"Dismount mounted ISO/VHD/VHDX disk image",
+               L"C:\\Windows\\System32\\imageres.dll,268", L"unmount_image", true, false, false, L"", L"ctrl", {L"DiskImages"});
+    addBuiltIn(L"builtin.lock_file", L"Lock File (Exclusive)", L"Hold an exclusive file lock until closed",
+               L"C:\\Windows\\System32\\imageres.dll,297", L"lock_file", true, false, false, L"", L"ctrl");
+    addBuiltIn(L"builtin.lock_check", L"Check File Locks", L"Show processes locking this file via Restart Manager",
+               L"C:\\Windows\\System32\\imageres.dll,54", L"lock_check", true, true, false, L"", L"ctrl");
+    addBuiltIn(L"builtin.view_sqlite_db", L"View SQLite DB", L"Inspect SQLite database tables via sqlite3",
+               L"C:\\WINDOWS\\System32\\imageres.dll,262", L"view_sqlite_db", true, false, false, L"", L"ctrl", {}, {L".db", L".sqlite", L".sqlite3"});
+    addBuiltIn(L"builtin.restart_explorer", L"Restart Explorer", L"Restart Windows Explorer cleanly",
+               L"C:\\Windows\\explorer.exe,0", L"restart_explorer", false, false, true, L"", L"ctrl");
+    addBuiltIn(L"builtin.wifi_passwords", L"WiFi Passwords", L"Display saved Wi-Fi SSIDs and passphrases",
+               L"C:\\WINDOWS\\System32\\imageres.dll,139", L"wifi_passwords", false, false, true, L"", L"ctrl");
+    addBuiltIn(L"builtin.clear_icon_cache", L"Clear Icon Cache", L"Rebuild Windows icon cache and refresh Explorer",
+               L"C:\\WINDOWS\\System32\\imageres.dll,16", L"clear_icon_cache", false, false, true, L"", L"alt");
+    addBuiltIn(L"builtin.clear_print_queue", L"Clear Print Queue", L"Stop spooler, clear stuck print jobs, restart spooler",
+               L"C:\\WINDOWS\\System32\\imageres.dll,45", L"clear_print_queue", false, false, true, L"", L"alt");
+    addBuiltIn(L"builtin.add_to_path", L"Add Folder to System PATH", L"Append selected folder to Machine PATH",
+               L"C:\\WINDOWS\\System32\\imageres.dll,89", L"add_to_path", false, true, true, L"", L"alt");
+    addBuiltIn(L"builtin.ip_renew", L"IP Renew", L"Release & renew DHCP lease and flush DNS",
+               L"C:\\WINDOWS\\System32\\imageres.dll,20", L"ip_renew", false, false, true, L"", L"alt");
+    addBuiltIn(L"builtin.check_internet", L"Check for Internet", L"Monitor connectivity to 8.8.8.8 and alert when online",
+               L"C:\\WINDOWS\\System32\\imageres.dll,20", L"check_internet", false, false, true, L"", L"alt");
+    addBuiltIn(L"builtin.ip_watcher", L"IP Watcher", L"Monitor a host or IP for online/offline transitions",
+               L"C:\\WINDOWS\\System32\\imageres.dll,272", L"ip_watcher", false, false, true, L"", L"alt");
+    addBuiltIn(L"builtin.flush_dns", L"Flush DNS", L"Flush Windows DNS resolver cache",
+               L"C:\\WINDOWS\\System32\\imageres.dll,114", L"flush_dns", false, false, true, L"", L"ctrl_alt");
 
     // Editable external program launchers (path, args, and icon customizable in Custom Commands)
     addCustomApp(L"app.antigravity", L"Open in Antigravity", L"Open file or folder in Antigravity IDE",
@@ -549,7 +555,6 @@ static bool MatchesModifierKey(const MenuItem& item, const SelectionContext& ctx
     if (mod == L"ctrl") return ctx.ctrlHeld;
     if (mod == L"alt") return ctx.altHeld;
     if (mod == L"ctrl_alt") return ctx.ctrlHeld && ctx.altHeld;
-    if (mod == L"win") return ctx.winHeld;
     return true;
 }
 

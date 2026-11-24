@@ -161,7 +161,7 @@ public sealed class ContextRulesConfig
     public bool AllowMultiSelect { get; set; } = true;
 
     [JsonPropertyName("modifierKey")]
-    public string ModifierKey { get; set; } = "none"; // none | ctrl | alt | ctrl_alt | win
+    public string ModifierKey { get; set; } = "none"; // none | ctrl | alt | ctrl_alt
 
     [JsonPropertyName("fileCategories")]
     public List<string> FileCategories { get; set; } = new();

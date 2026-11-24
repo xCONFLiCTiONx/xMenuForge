@@ -423,6 +423,41 @@ bool TryRunExtendedBuiltIn(
         outExitCode = LaunchPowerShell(L"$host.UI.RawUI.WindowTitle='SQLite DB Viewer'; sqlite3 '" + f + L"' \".headers on\" \".mode box\" \".tables\" \"SELECT * FROM Files LIMIT 200;\"; Read-Host 'Press Enter to close'", false, true);
         return true;
     }
+
+    // Native System Folder direct openers
+    auto openKnownFolder = [](REFKNOWNFOLDERID id) -> int {
+        PWSTR p = nullptr;
+        if (SUCCEEDED(SHGetKnownFolderPath(id, 0, nullptr, &p)) && p) {
+            AllowSetForegroundWindow(ASFW_ANY);
+            ShellExecuteW(nullptr, L"open", p, nullptr, nullptr, SW_SHOWNORMAL);
+            CoTaskMemFree(p);
+            return 0;
+        }
+        return 1;
+    };
+    if (act == L"sys_appdata_local") { outExitCode = openKnownFolder(FOLDERID_LocalAppData); return true; }
+    if (act == L"sys_appdata_roaming") { outExitCode = openKnownFolder(FOLDERID_RoamingAppData); return true; }
+    if (act == L"sys_programdata") { outExitCode = openKnownFolder(FOLDERID_ProgramData); return true; }
+    if (act == L"sys_startmenu_user") { outExitCode = openKnownFolder(FOLDERID_StartMenu); return true; }
+    if (act == L"sys_startmenu_all") { outExitCode = openKnownFolder(FOLDERID_CommonStartMenu); return true; }
+    if (act == L"sys_startup") { outExitCode = openKnownFolder(FOLDERID_Startup); return true; }
+    if (act == L"sys_temp") {
+        WCHAR tmp[MAX_PATH]{};
+        GetTempPathW(MAX_PATH, tmp);
+        AllowSetForegroundWindow(ASFW_ANY);
+        ShellExecuteW(nullptr, L"open", tmp, nullptr, nullptr, SW_SHOWNORMAL);
+        outExitCode = 0;
+        return true;
+    }
+    if (act == L"sys_hosts") {
+        WCHAR winDir[MAX_PATH]{};
+        GetWindowsDirectoryW(winDir, MAX_PATH);
+        std::wstring p = std::wstring(winDir) + L"\\System32\\drivers\\etc";
+        AllowSetForegroundWindow(ASFW_ANY);
+        ShellExecuteW(nullptr, L"open", p.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+        outExitCode = 0;
+        return true;
+    }
     return false;
 }
 

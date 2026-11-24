@@ -373,7 +373,6 @@ public partial class MainWindow : Window
                 "ctrl" => " [Ctrl]",
                 "alt" => " [Alt]",
                 "ctrl_alt" => " [Ctrl+Alt]",
-                "win" => " [Win]",
                 _ => ""
             };
             var statusTb = new TextBlock
@@ -639,7 +638,6 @@ public partial class MainWindow : Window
         string simMod = ((PreviewModifierCombo?.SelectedItem as ComboBoxItem)?.Tag as string) ?? "none";
         bool ctrlHeld = simMod is "ctrl" or "ctrl_alt";
         bool altHeld = simMod is "alt" or "ctrl_alt";
-        bool winHeld = simMod == "win";
 
         bool MatchesMod(MenuItemConfig item)
         {
@@ -648,7 +646,6 @@ public partial class MainWindow : Window
                 "ctrl" => ctrlHeld,
                 "alt" => altHeld,
                 "ctrl_alt" => ctrlHeld && altHeld,
-                "win" => winHeld,
                 _ => true
             };
         }
@@ -766,7 +763,6 @@ public partial class MainWindow : Window
             modCombo.Items.Add(new ComboBoxItem { Content = "Hold Ctrl", Tag = "ctrl" });
             modCombo.Items.Add(new ComboBoxItem { Content = "Hold Alt", Tag = "alt" });
             modCombo.Items.Add(new ComboBoxItem { Content = "Ctrl + Alt", Tag = "ctrl_alt" });
-            modCombo.Items.Add(new ComboBoxItem { Content = "Hold Win", Tag = "win" });
             SelectComboByTag(modCombo, item.Rules.ModifierKey);
             modCombo.SelectionChanged += (_, _) =>
             {

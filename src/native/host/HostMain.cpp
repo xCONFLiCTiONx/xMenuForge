@@ -132,7 +132,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
         return 0;
     }
 
-    if ((mode == L"--invoke" || mode == L"--flyout") && args.size() >= 2) {
+    if ((mode == L"--invoke" || mode == L"--flyout" || mode == L"--open-editor") && args.size() >= 2) {
         std::wstring targetId = args[1];
         xmf::SelectionContext ctx;
         POINT pt{};
@@ -151,13 +151,23 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                 ctx.ctrlHeld = true;
             } else if (args[i] == L"--alt") {
                 ctx.altHeld = true;
-            } else if (args[i] == L"--win") {
-                ctx.winHeld = true;
             } else if (args[i] == L"--x" && i + 1 < args.size()) {
                 pt.x = _wtoi(args[++i].c_str());
             } else if (args[i] == L"--y" && i + 1 < args.size()) {
                 pt.y = _wtoi(args[++i].c_str());
             }
+        }
+
+        if (mode == L"--open-editor") {
+            std::wstring editorArgs;
+            for (const auto& p : ctx.paths) {
+                if (!editorArgs.empty()) editorArgs += L" ";
+                editorArgs += L"\"" + p + L"\"";
+            }
+            AllowSetForegroundWindow(ASFW_ANY);
+            ShellExecuteW(nullptr, L"open", targetId.c_str(), editorArgs.empty() ? nullptr : editorArgs.c_str(), nullptr, SW_SHOWNORMAL);
+            CoUninitialize();
+            return 0;
         }
 
         xmf::AppConfig cfg = xmf::LoadConfig();
