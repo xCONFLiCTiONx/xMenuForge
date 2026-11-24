@@ -1,4 +1,5 @@
 #include "CommandRunner.h"
+#include "BuiltInTools.h"
 #include "Dialogs.h"
 
 #include <shellapi.h>
@@ -256,6 +257,10 @@ static int RunBuiltInAction(const AppConfig& config, const MenuItem& item, const
             dir.empty() ? nullptr : dir.c_str(),
             SW_SHOWNORMAL);
         return reinterpret_cast<INT_PTR>(res) > 32 ? 0 : 1;
+    }
+    int extendedRc = 0;
+    if (xmf::tools::TryRunExtendedBuiltIn(config, act, ctx, dir, extendedRc)) {
+        return extendedRc;
     }
     return 1;
 }

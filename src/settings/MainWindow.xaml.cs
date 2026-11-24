@@ -1109,6 +1109,17 @@ public partial class MainWindow : Window
         Process.Start(new ProcessStartInfo("explorer.exe", ConfigService.AppDataDir) { UseShellExecute = true });
     }
 
+    private void ResetDefaults_Click(object sender, RoutedEventArgs e)
+    {
+        if (!DarkDialog.Confirm(this, "Reset to Defaults", "Replace your current menu layout with the clean xMenuForge defaults? A backup will be saved to config.json.bak."))
+            return;
+        if (File.Exists(ConfigService.ConfigPath))
+            File.Copy(ConfigService.ConfigPath, ConfigService.ConfigPath + ".bak", overwrite: true);
+        _config = ConfigService.CreateDefaultConfig();
+        SaveConfigWithFeedback("Reset to clean defaults");
+        RefreshAllViews();
+    }
+
     private void ExportConfig_Click(object sender, RoutedEventArgs e)
     {
         var dlg = new SaveFileDialog { FileName = "xMenuForge-config.json", Filter = "JSON Files|*.json" };

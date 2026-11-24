@@ -60,9 +60,12 @@ public static class ConfigService
     public static AppConfig CreateDefaultConfig()
     {
         var cfg = new AppConfig { SchemaVersion = 1 };
+        cfg.Appearance.WindowMaximized = true;
         int order = 0;
 
-        void AddBuiltIn(string id, string title, string desc, string icon, string action, bool files, bool folders, bool bg, string parentId = "")
+        void AddBuiltIn(string id, string title, string desc, string icon, string action,
+                        bool files, bool folders, bool bg, string parentId = "", string modKey = "none",
+                        string[]? cats = null, string[]? exts = null)
         {
             cfg.Items.Add(new MenuItemConfig
             {
@@ -76,11 +79,52 @@ public static class ConfigService
                 Description = desc,
                 Icon = icon,
                 BuiltInAction = action,
-                Rules = new ContextRulesConfig { ShowOnFiles = files, ShowOnFolders = folders, ShowOnBackground = bg }
+                Rules = new ContextRulesConfig
+                {
+                    ShowOnFiles = files,
+                    ShowOnFolders = folders,
+                    ShowOnBackground = bg,
+                    ModifierKey = modKey,
+                    FileCategories = cats?.ToList() ?? new(),
+                    Extensions = exts?.ToList() ?? new()
+                }
             });
         }
 
-        void AddCategory(string id, string title, string icon)
+        void AddCustomApp(string id, string title, string desc, string icon, string exe, string args,
+                          bool files, bool folders, bool bg, bool admin, string parentId = "", string modKey = "none",
+                          string[]? exts = null)
+        {
+            cfg.Items.Add(new MenuItemConfig
+            {
+                Id = id,
+                Kind = "command",
+                ParentId = parentId,
+                Order = order++,
+                Enabled = true,
+                BuiltIn = false,
+                Title = title,
+                Description = desc,
+                Icon = icon,
+                Runner = new RunnerConfig
+                {
+                    Type = "executable",
+                    Executable = exe,
+                    Arguments = args,
+                    RunAsAdmin = admin
+                },
+                Rules = new ContextRulesConfig
+                {
+                    ShowOnFiles = files,
+                    ShowOnFolders = folders,
+                    ShowOnBackground = bg,
+                    ModifierKey = modKey,
+                    Extensions = exts?.ToList() ?? new()
+                }
+            });
+        }
+
+        void AddCategory(string id, string title, string icon, string modKey = "none")
         {
             cfg.Items.Add(new MenuItemConfig
             {
@@ -90,7 +134,8 @@ public static class ConfigService
                 Enabled = true,
                 BuiltIn = true,
                 Title = title,
-                Icon = icon
+                Icon = icon,
+                Rules = new ContextRulesConfig { ModifierKey = modKey }
             });
         }
 
@@ -108,14 +153,35 @@ public static class ConfigService
             });
         }
 
+        // Everyday top-level essentials
         AddBuiltIn("builtin.attributes", "Attributes", "View and modify file attributes and timestamps", @"Icons\Attributes.ico", "attributes", true, true, true);
         AddBuiltIn("builtin.edit_with", "Edit With...", "Open selected files in an installed editor", @"Icons\Edit with.ico", "edit_with", true, false, false);
-        AddBuiltIn("builtin.copy_name", "Copy Name", "Copy selected file or folder names to clipboard", @"Icons\Copy Name.ico", "copy_name", true, true, false);
-        AddBuiltIn("builtin.copy_path", "Copy Path", "Copy full paths of selected items to clipboard", @"Icons\Copy Path.ico", "copy_path", true, true, false);
-        AddBuiltIn("builtin.paste_to_file", "Paste to File", "Save clipboard text directly into a file here", @"Icons\Paste to File.ico", "paste_to_file", false, false, true);
-        AddBuiltIn("builtin.take_ownership", "Take Ownership", "Take ownership and grant Full Control recursively", @"Icons\Take Ownership.ico", "take_ownership", true, true, false);
+
+        // Clipboard & Copy submenu
+        AddCategory("cat.clipboard", "Clipboard & Copy", @"Icons\Copy Path.ico");
+        AddBuiltIn("builtin.copy_name", "Copy Name", "Copy selected file or folder names to clipboard", @"Icons\Copy Name.ico", "copy_name", true, true, false, "cat.clipboard");
+        AddBuiltIn("builtin.copy_path", "Copy Path", "Copy full paths of selected items to clipboard", @"Icons\Copy Path.ico", "copy_path", true, true, false, "cat.clipboard");
+        AddBuiltIn("builtin.copy_file_contents", "Copy File Contents", "Read file text directly to clipboard", @"C:\WINDOWS\System32\imageres.dll,90", "copy_file_contents", true, false, false, "cat.clipboard");
+        AddBuiltIn("builtin.copy_sha256", "Copy File Hash (SHA-256)", "Compute SHA-256 hash natively and copy to clipboard", @"C:\Windows\System32\imageres.dll,77", "copy_sha256", true, false, false, "cat.clipboard");
+        AddBuiltIn("builtin.copy_tree_view", "Copy Tree View", "Copy recursive folder tree paths to clipboard", @"C:\WINDOWS\System32\imageres.dll,7", "copy_tree_view", false, true, true, "cat.clipboard");
+        AddBuiltIn("builtin.paste_to_file", "Paste to File", "Save clipboard text directly into a file here", @"Icons\Paste to File.ico", "paste_to_file", false, false, true, "cat.clipboard");
+
+        // File & Disk Tools submenu
+        AddCategory("cat.file_tools", "File & Disk Tools", @"Icons\Take Ownership.ico");
+        AddBuiltIn("builtin.unzip_here", "Unzip Here", "Extract archive into a subfolder of the same name", @"C:\WINDOWS\System32\imageres.dll,165", "unzip_here", true, false, false, "cat.file_tools", "none", null, [".zip"]);
+        AddBuiltIn("builtin.search_clipboard", "Search Clipboard Name", "Search folder recursively for the name on your clipboard", @"C:\WINDOWS\System32\imageres.dll,168", "search_clipboard", false, true, true, "cat.file_tools");
+        AddBuiltIn("builtin.flip_image", "Flip Image Horizontally", "Flip selected image horizontally in place", @"C:\WINDOWS\System32\imageres.dll,108", "flip_image", true, false, false, "cat.file_tools", "ctrl", ["Images"]);
+        AddBuiltIn("builtin.create_junction", "Create Junction...", "Create an NTFS directory junction to this folder", @"C:\WINDOWS\System32\imageres.dll,166", "create_junction", false, true, false, "cat.file_tools", "ctrl");
+        AddBuiltIn("builtin.mount_image", "Mount Disk Image", "Mount ISO/VHD/VHDX disk image", @"C:\Windows\System32\imageres.dll,56", "mount_image", true, false, false, "cat.file_tools", "ctrl", ["DiskImages"]);
+        AddBuiltIn("builtin.unmount_image", "Unmount Disk Image", "Dismount mounted ISO/VHD/VHDX disk image", @"C:\Windows\System32\imageres.dll,268", "unmount_image", true, false, false, "cat.file_tools", "ctrl", ["DiskImages"]);
+        AddBuiltIn("builtin.lock_file", "Lock File (Exclusive)", "Hold an exclusive file lock until closed", @"C:\Windows\System32\imageres.dll,297", "lock_file", true, false, false, "cat.file_tools", "ctrl");
+        AddBuiltIn("builtin.lock_check", "Check File Locks", "Show processes locking this file via Restart Manager", @"C:\Windows\System32\imageres.dll,54", "lock_check", true, true, false, "cat.file_tools", "ctrl");
+        AddBuiltIn("builtin.view_sqlite_db", "View SQLite DB", "Inspect SQLite database tables via sqlite3", @"C:\WINDOWS\System32\imageres.dll,262", "view_sqlite_db", true, false, false, "cat.file_tools", "ctrl", null, [".db", ".sqlite", ".sqlite3"]);
+        AddBuiltIn("builtin.take_ownership", "Take Ownership", "Take ownership and grant Full Control recursively", @"Icons\Take Ownership.ico", "take_ownership", true, true, false, "cat.file_tools", "ctrl");
 
         AddSep("builtin.sep_terminals");
+
+        // Terminals submenu
         AddCategory("cat.terminals", "Terminals", @"Icons\Terminals.ico");
         AddBuiltIn("builtin.terminal", "Windows Terminal", "Open Windows Terminal in target folder", @"Icons\Terminals.ico", "terminal", false, true, true, "cat.terminals");
         AddBuiltIn("builtin.terminal_admin", "Windows Terminal (Admin)", "Open elevated Windows Terminal in target folder", @"Icons\Terminals.ico", "terminal_admin", false, true, true, "cat.terminals");
@@ -124,7 +190,40 @@ public static class ConfigService
         AddBuiltIn("builtin.cmd", "Command Prompt", "Open Command Prompt in target folder", @"Icons\Terminals.ico", "cmd", false, true, true, "cat.terminals");
         AddBuiltIn("builtin.cmd_admin", "Command Prompt (Admin)", "Open elevated Command Prompt in target folder", @"Icons\Terminals.ico", "cmd_admin", false, true, true, "cat.terminals");
 
-        AddBuiltIn("builtin.system_folders", "System Folders...", "Jump to common Windows system directories", @"Icons\System Folders.ico", "system_folders", false, false, true);
+        // System & Network submenu
+        AddCategory("cat.system", "System & Network", @"Icons\System Folders.ico");
+        AddBuiltIn("builtin.system_folders", "System Folders...", "Jump to common Windows system directories", @"Icons\System Folders.ico", "system_folders", false, false, true, "cat.system");
+        AddBuiltIn("builtin.restart_explorer", "Restart Explorer", "Restart Windows Explorer cleanly", @"C:\Windows\explorer.exe,0", "restart_explorer", false, false, true, "cat.system", "ctrl");
+        AddBuiltIn("builtin.clear_icon_cache", "Clear Icon Cache", "Rebuild Windows icon cache and refresh Explorer", @"C:\WINDOWS\System32\imageres.dll,16", "clear_icon_cache", false, false, true, "cat.system", "alt");
+        AddBuiltIn("builtin.clear_print_queue", "Clear Print Queue", "Stop spooler, clear stuck print jobs, restart spooler", @"C:\WINDOWS\System32\imageres.dll,45", "clear_print_queue", false, false, true, "cat.system", "alt");
+        AddBuiltIn("builtin.add_to_path", "Add Folder to System PATH", "Append selected folder to Machine PATH", @"C:\WINDOWS\System32\imageres.dll,89", "add_to_path", false, true, true, "cat.system", "alt");
+        AddBuiltIn("builtin.flush_dns", "Flush DNS", "Flush Windows DNS resolver cache", @"C:\WINDOWS\System32\imageres.dll,114", "flush_dns", false, false, true, "cat.system", "ctrl_alt");
+        AddBuiltIn("builtin.ip_renew", "IP Renew", "Release & renew DHCP lease and flush DNS", @"C:\WINDOWS\System32\imageres.dll,20", "ip_renew", false, false, true, "cat.system", "alt");
+        AddBuiltIn("builtin.check_internet", "Check for Internet", "Monitor connectivity to 8.8.8.8 and alert when online", @"C:\WINDOWS\System32\imageres.dll,20", "check_internet", false, false, true, "cat.system", "alt");
+        AddBuiltIn("builtin.ip_watcher", "IP Watcher", "Monitor a host or IP for online/offline transitions", @"C:\WINDOWS\System32\imageres.dll,272", "ip_watcher", false, false, true, "cat.system", "alt");
+        AddBuiltIn("builtin.wifi_passwords", "WiFi Passwords", "Display saved Wi-Fi SSIDs and passphrases", @"C:\WINDOWS\System32\imageres.dll,139", "wifi_passwords", false, false, true, "cat.system", "ctrl");
+
+        AddSep("builtin.sep_apps");
+
+        // Editable external program launchers
+        AddCustomApp("app.antigravity", "Open in Antigravity", "Open file or folder in Antigravity IDE",
+                     @"C:\Users\Michael\AppData\Local\Programs\Antigravity IDE\Antigravity IDE.exe,0",
+                     @"C:\Users\Michael\AppData\Local\Programs\Antigravity IDE\Antigravity IDE.exe",
+                     "\"{path}\"", true, true, true, false);
+        AddCustomApp("app.chrome", "Open in Chrome", "Open file in Google Chrome",
+                     @"C:\Program Files\Google\Chrome\Application\chrome.exe,8",
+                     @"C:\Program Files\Google\Chrome\Application\chrome.exe",
+                     "\"{path}\"", true, false, false, false, "", "none",
+                     [".html", ".htm", ".svg", ".pdf", ".webp", ".png", ".jpg", ".jpeg", ".gif", ".txt", ".json", ".xml"]);
+        AddCustomApp("app.directory_icon_tool", "Directory Icon Tool", "Customize folder icons with DirectoryIconTool",
+                     @"C:\Users\Michael\AppData\Local\xPrograms\DirectoryIconTool\DirectoryIconTool.exe,0",
+                     @"C:\Users\Michael\AppData\Local\xPrograms\DirectoryIconTool\DirectoryIconTool.exe",
+                     "\"{path}\"", false, true, true, false, "", "ctrl");
+        AddCustomApp("app.unlocker", "Unlocker", "Unlock locked files or folders with Unlock Files",
+                     @"C:\Users\Michael\AppData\Local\xPrograms\UnlockFiles\Unlock Files.exe,0",
+                     @"C:\Users\Michael\AppData\Local\xPrograms\UnlockFiles\Unlock Files.exe",
+                     "\"{path}\"", true, true, true, true, "", "ctrl");
+
         AddSep("builtin.sep_settings");
         AddBuiltIn("builtin.settings", "xMenuForge Settings", "Configure menus, commands, and execution rules", @"Icons\Settings.ico", "settings", true, true, true);
 

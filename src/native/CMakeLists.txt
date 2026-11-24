@@ -27,9 +27,10 @@ set_target_properties(xMenuForgeShell PROPERTIES OUTPUT_NAME "xMenuForge.Shell")
 add_executable(xMenuForgeHost WIN32
   host/HostMain.cpp
   host/CommandRunner.cpp
+  host/BuiltInTools.cpp
   host/Dialogs.cpp
   host/Registration.cpp
   host/host.manifest
 )
-target_link_libraries(xMenuForgeHost PRIVATE xMenuForgeCommon ole32 user32 gdi32 comctl32 advapi32)
+target_link_libraries(xMenuForgeHost PRIVATE xMenuForgeCommon ole32 user32 gdi32 comctl32 advapi32 bcrypt rstrtmgr)
 set_target_properties(xMenuForgeHost PROPERTIES OUTPUT_NAME "xMenuForge.Host")
