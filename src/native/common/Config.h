@@ -56,7 +56,7 @@ struct ContextRules {
     bool showOnFolders = true;
     bool showOnBackground = false;
     bool allowMultiSelect = true;
-    std::wstring modifierKey = L"none"; // none | ctrl | shift | alt | ctrl_shift
+    std::wstring modifierKey = L"none"; // none | ctrl | alt | ctrl_alt | win
     std::vector<std::wstring> fileCategories; // empty = all
     std::vector<std::wstring> extensions;     // empty = all
 };
@@ -112,8 +112,8 @@ struct SelectionContext {
     bool isBackground = false;
     bool isFolder = false;
     bool ctrlHeld = false;
-    bool shiftHeld = false;
     bool altHeld = false;
+    bool winHeld = false;
     std::vector<std::wstring> paths;
 };
 

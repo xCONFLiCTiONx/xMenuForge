@@ -371,9 +371,9 @@ public partial class MainWindow : Window
             string modTag = item.Rules.ModifierKey switch
             {
                 "ctrl" => " [Ctrl]",
-                "shift" => " [Shift]",
                 "alt" => " [Alt]",
-                "ctrl_shift" => " [Ctrl+Shift]",
+                "ctrl_alt" => " [Ctrl+Alt]",
+                "win" => " [Win]",
                 _ => ""
             };
             var statusTb = new TextBlock
@@ -593,18 +593,18 @@ public partial class MainWindow : Window
 
         string ctxMode = ((PreviewContextCombo.SelectedItem as ComboBoxItem)?.Tag as string) ?? "file";
         string simMod = ((PreviewModifierCombo?.SelectedItem as ComboBoxItem)?.Tag as string) ?? "none";
-        bool ctrlHeld = simMod is "ctrl" or "ctrl_shift";
-        bool shiftHeld = simMod is "shift" or "ctrl_shift";
-        bool altHeld = simMod == "alt";
+        bool ctrlHeld = simMod is "ctrl" or "ctrl_alt";
+        bool altHeld = simMod is "alt" or "ctrl_alt";
+        bool winHeld = simMod == "win";
 
         bool MatchesMod(MenuItemConfig item)
         {
             return item.Rules.ModifierKey switch
             {
                 "ctrl" => ctrlHeld,
-                "shift" => shiftHeld,
                 "alt" => altHeld,
-                "ctrl_shift" => ctrlHeld && shiftHeld,
+                "ctrl_alt" => ctrlHeld && altHeld,
+                "win" => winHeld,
                 _ => true
             };
         }
@@ -719,9 +719,9 @@ public partial class MainWindow : Window
             var modCombo = new ComboBox { Width = 128, Margin = new Thickness(10, 0, 14, 0), VerticalAlignment = VerticalAlignment.Center, ToolTip = "Modifier key required to show this command" };
             modCombo.Items.Add(new ComboBoxItem { Content = "Always", Tag = "none" });
             modCombo.Items.Add(new ComboBoxItem { Content = "Hold Ctrl", Tag = "ctrl" });
-            modCombo.Items.Add(new ComboBoxItem { Content = "Hold Shift", Tag = "shift" });
             modCombo.Items.Add(new ComboBoxItem { Content = "Hold Alt", Tag = "alt" });
-            modCombo.Items.Add(new ComboBoxItem { Content = "Ctrl + Shift", Tag = "ctrl_shift" });
+            modCombo.Items.Add(new ComboBoxItem { Content = "Ctrl + Alt", Tag = "ctrl_alt" });
+            modCombo.Items.Add(new ComboBoxItem { Content = "Hold Win", Tag = "win" });
             SelectComboByTag(modCombo, item.Rules.ModifierKey);
             modCombo.SelectionChanged += (_, _) =>
             {

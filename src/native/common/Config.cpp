@@ -441,9 +441,9 @@ static bool MatchesModifierKey(const MenuItem& item, const SelectionContext& ctx
     const std::wstring& mod = item.rules.modifierKey;
     if (mod.empty() || mod == L"none") return true;
     if (mod == L"ctrl") return ctx.ctrlHeld;
-    if (mod == L"shift") return ctx.shiftHeld;
     if (mod == L"alt") return ctx.altHeld;
-    if (mod == L"ctrl_shift") return ctx.ctrlHeld && ctx.shiftHeld;
+    if (mod == L"ctrl_alt") return ctx.ctrlHeld && ctx.altHeld;
+    if (mod == L"win") return ctx.winHeld;
     return true;
 }
 

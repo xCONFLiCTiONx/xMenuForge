@@ -149,10 +149,10 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                 ctx.isFolder = true;
             } else if (args[i] == L"--ctrl") {
                 ctx.ctrlHeld = true;
-            } else if (args[i] == L"--shift") {
-                ctx.shiftHeld = true;
             } else if (args[i] == L"--alt") {
                 ctx.altHeld = true;
+            } else if (args[i] == L"--win") {
+                ctx.winHeld = true;
             } else if (args[i] == L"--x" && i + 1 < args.size()) {
                 pt.x = _wtoi(args[++i].c_str());
             } else if (args[i] == L"--y" && i + 1 < args.size()) {

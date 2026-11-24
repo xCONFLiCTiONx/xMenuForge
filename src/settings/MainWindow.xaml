@@ -214,9 +214,9 @@
                             <ComboBox x:Name="DesignerModifierCombo" Width="138" Margin="0,0,8,0" ToolTip="Set modifier key for selected item" SelectionChanged="DesignerModifier_Changed">
                                 <ComboBoxItem Content="Key: Always" Tag="none"/>
                                 <ComboBoxItem Content="Key: Hold Ctrl" Tag="ctrl"/>
-                                <ComboBoxItem Content="Key: Hold Shift" Tag="shift"/>
                                 <ComboBoxItem Content="Key: Hold Alt" Tag="alt"/>
-                                <ComboBoxItem Content="Key: Ctrl+Shift" Tag="ctrl_shift"/>
+                                <ComboBoxItem Content="Key: Ctrl + Alt" Tag="ctrl_alt"/>
+                                <ComboBoxItem Content="Key: Hold Win" Tag="win"/>
                             </ComboBox>
                             <Button Content="Delete" Style="{StaticResource DangerButton}" Click="DesignerDelete_Click"/>
                         </WrapPanel>
@@ -258,9 +258,9 @@
                                             <ComboBox x:Name="PreviewModifierCombo" Grid.Column="2" SelectionChanged="PreviewContext_Changed">
                                                 <ComboBoxItem Content="Normal Click" IsSelected="True" Tag="none"/>
                                                 <ComboBoxItem Content="Hold Ctrl" Tag="ctrl"/>
-                                                <ComboBoxItem Content="Hold Shift" Tag="shift"/>
                                                 <ComboBoxItem Content="Hold Alt" Tag="alt"/>
-                                                <ComboBoxItem Content="Hold Ctrl + Shift" Tag="ctrl_shift"/>
+                                                <ComboBoxItem Content="Hold Ctrl + Alt" Tag="ctrl_alt"/>
+                                                <ComboBoxItem Content="Hold Win" Tag="win"/>
                                             </ComboBox>
                                         </Grid>
                                     </StackPanel>
@@ -424,9 +424,9 @@
                                                 <ComboBox x:Name="CustomModifierCombo">
                                                     <ComboBoxItem Content="Always (Normal Click)" Tag="none"/>
                                                     <ComboBoxItem Content="Hold Ctrl" Tag="ctrl"/>
-                                                    <ComboBoxItem Content="Hold Shift (Classic)" Tag="shift"/>
                                                     <ComboBoxItem Content="Hold Alt" Tag="alt"/>
-                                                    <ComboBoxItem Content="Hold Ctrl + Shift" Tag="ctrl_shift"/>
+                                                    <ComboBoxItem Content="Hold Ctrl + Alt" Tag="ctrl_alt"/>
+                                                    <ComboBoxItem Content="Hold Win" Tag="win"/>
                                                 </ComboBox>
                                             </StackPanel>
                                         </Grid>
@@ -589,12 +589,12 @@
                                         <TextBlock Text="Modifier Key to Reveal (reduces everyday menu clutter)" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,6"/>
                                         <ComboBox x:Name="RuleModifierCombo" Width="320" HorizontalAlignment="Left" Margin="0,0,0,4">
                                             <ComboBoxItem Content="Always Show (Normal Right-Click)" Tag="none"/>
-                                            <ComboBoxItem Content="Hold Ctrl (Modern Win11 &amp; Classic)" Tag="ctrl"/>
-                                            <ComboBoxItem Content="Hold Shift (Classic / Extended Menu)" Tag="shift"/>
-                                            <ComboBoxItem Content="Hold Alt (Modern Win11 &amp; Classic)" Tag="alt"/>
-                                            <ComboBoxItem Content="Hold Ctrl + Shift" Tag="ctrl_shift"/>
+                                            <ComboBoxItem Content="Hold Ctrl" Tag="ctrl"/>
+                                            <ComboBoxItem Content="Hold Alt" Tag="alt"/>
+                                            <ComboBoxItem Content="Hold Ctrl + Alt" Tag="ctrl_alt"/>
+                                            <ComboBoxItem Content="Hold Win" Tag="win"/>
                                         </ComboBox>
-                                        <TextBlock Text="Tip: Hold Ctrl or Alt to reveal extra items inside the Windows 11 Modern menu. Windows 11 opens the Classic menu on Shift + Right-Click."
+                                        <TextBlock Text="Hold Ctrl, Alt, Ctrl + Alt, or Win while right-clicking to reveal hidden items right inside the Windows 11 Modern context menu."
                                                    FontSize="11" Foreground="{StaticResource TextMutedBrush}" TextWrapping="Wrap" Margin="0,0,0,14"/>
 
                                         <TextBlock Text="Specific File Extensions (comma-separated, e.g. .ps1, .json, .cpp)" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,6"/>

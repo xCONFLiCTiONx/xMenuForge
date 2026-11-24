@@ -136,11 +136,11 @@ void LaunchHost(const std::wstring& modeFlag, const std::wstring& itemId, const 
     if (ctx.ctrlHeld) {
         cmdLine += L" --ctrl";
     }
-    if (ctx.shiftHeld) {
-        cmdLine += L" --shift";
-    }
     if (ctx.altHeld) {
         cmdLine += L" --alt";
+    }
+    if (ctx.winHeld) {
+        cmdLine += L" --win";
     }
 
     POINT pt{};
@@ -181,21 +181,25 @@ void LaunchHost(const std::wstring& modeFlag, const std::wstring& itemId, const 
 
 struct ModifierSnapshot {
     bool ctrl = false;
-    bool shift = false;
     bool alt = false;
+    bool win = false;
 
-    static ModifierSnapshot Capture(bool extendedVerbs = false) {
+    static bool IsWinDown() {
+        return ((GetAsyncKeyState(VK_LWIN) & 0x8000) != 0) || ((GetAsyncKeyState(VK_RWIN) & 0x8000) != 0);
+    }
+
+    static ModifierSnapshot Capture() {
         ModifierSnapshot m;
         m.ctrl = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
-        m.shift = extendedVerbs || ((GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0);
         m.alt = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
+        m.win = IsWinDown();
         return m;
     }
 
     void ApplyTo(xmf::SelectionContext& ctx) const {
         ctx.ctrlHeld = ctrl || ((GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0);
-        ctx.shiftHeld = shift || ((GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0);
         ctx.altHeld = alt || ((GetAsyncKeyState(VK_MENU) & 0x8000) != 0);
+        ctx.winHeld = win || IsWinDown();
     }
 };
 
@@ -710,7 +714,7 @@ public:
             return MAKE_HRESULT(SEVERITY_SUCCESS, FACILITY_NULL, 0);
         }
 
-        ModifierSnapshot::Capture((uFlags & CMF_EXTENDEDVERBS) != 0).ApplyTo(ctx_);
+        ModifierSnapshot::Capture().ApplyTo(ctx_);
 
         for (HBITMAP b : bitmaps_) {
             if (b) DeleteObject(b);
