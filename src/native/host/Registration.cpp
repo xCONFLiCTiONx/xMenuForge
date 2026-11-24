@@ -261,8 +261,18 @@ bool RegisterAll(const std::wstring& installDir, bool enableClassic, bool restar
         DeleteHkcuTree(L"Software\\Classes\\Directory\\Background\\shellex\\ContextMenuHandlers\\xMenuForge");
     }
 
-    // 3. Generate per-slot Sparse Package manifests in <installDir>\Slots\Slot<N>\AppxManifest.xml
-    //    and register all 12 native Win11 top-level slots in a single PowerShell call!
+    // 3. Determine exact number of slots needed (avoids registering unused AppX packages)
+    xmf::AppConfig cfg = xmf::LoadConfig();
+    int activeSlots = 1;
+    if (cfg.appearance.modernSubmenuMode != L"single" && cfg.appearance.modernSubmenuMode != L"flatten") {
+        int topCount = 0;
+        for (const auto& it : cfg.items) {
+            if (it.enabled && it.parentId.empty() && it.kind != xmf::ItemKind::Separator) ++topCount;
+        }
+        activeSlots = (topCount < 1) ? 1 : (topCount > kSlotCount ? kSlotCount : topCount);
+    }
+
+    // Generate per-slot Sparse Package manifests in <installDir>\Slots\Slot<N>\AppxManifest.xml
     fs::path slotsRoot = dir / L"Slots";
     std::error_code ec;
     fs::create_directories(slotsRoot, ec);
@@ -273,7 +283,7 @@ bool RegisterAll(const std::wstring& installDir, bool enableClassic, bool restar
        << L"Get-AppxPackage -Name 'xCONFLiCTiONx.xMenuForge*' -ErrorAction SilentlyContinue | Remove-AppxPackage -ErrorAction SilentlyContinue; "
        << L"Add-AppxPackage -Register -ForceUpdateFromAnyVersion -Path '" << manifestPath.wstring() << L"' -ExternalLocation '" << dir.wstring() << L"'; ";
 
-    for (int slot = 1; slot < kSlotCount; ++slot) {
+    for (int slot = 1; slot < activeSlots; ++slot) {
         fs::path slotDir = slotsRoot / (L"Slot" + std::to_wstring(slot));
         fs::create_directories(slotDir, ec);
         fs::path slotManifest = slotDir / L"AppxManifest.xml";

@@ -8,8 +8,11 @@
 #include <atomic>
 #include <filesystem>
 #include <fstream>
+#include <memory>
+#include <mutex>
 #include <new>
 #include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -56,10 +59,84 @@ std::atomic_ulong g_objects{0};
 std::atomic_ulong g_locks{0};
 
 std::wstring GetModuleDir() {
-    WCHAR buf[MAX_PATH] = {};
-    if (GetModuleFileNameW(g_hModule, buf, MAX_PATH) == 0) return {};
-    PathRemoveFileSpecW(buf);
-    return buf;
+    static std::wstring cached = []() {
+        WCHAR buf[MAX_PATH] = {};
+        if (GetModuleFileNameW(g_hModule, buf, MAX_PATH) == 0) return std::wstring{};
+        PathRemoveFileSpecW(buf);
+        return std::wstring(buf);
+    }();
+    return cached;
+}
+
+struct CachedConfigState {
+    std::mutex mtx;
+    FILETIME lastWrite{};
+    DWORD lastSize = 0;
+    ULONGLONG lastStatTick = 0;
+    std::shared_ptr<const xmf::AppConfig> config;
+    std::vector<const xmf::MenuItem*> topItems;
+    std::unordered_map<std::wstring, std::wstring> iconCache;
+};
+
+CachedConfigState& ConfigCache() {
+    static CachedConfigState state;
+    return state;
+}
+
+std::shared_ptr<const xmf::AppConfig> GetCachedConfig(std::vector<const xmf::MenuItem*>* outTopItems = nullptr) {
+    auto& st = ConfigCache();
+    std::lock_guard<std::mutex> lock(st.mtx);
+
+    ULONGLONG now = GetTickCount64();
+    // Avoid even stat'ing the file 16 times within the same right-click (250ms window)
+    if (st.config && (now - st.lastStatTick) < 250) {
+        if (outTopItems) *outTopItems = st.topItems;
+        return st.config;
+    }
+
+    st.lastStatTick = now;
+    WIN32_FILE_ATTRIBUTE_DATA fad{};
+    std::wstring path = xmf::GetConfigPath();
+    bool needReload = !st.config;
+    if (GetFileAttributesExW(path.c_str(), GetFileExInfoStandard, &fad)) {
+        if (!st.config ||
+            fad.ftLastWriteTime.dwLowDateTime != st.lastWrite.dwLowDateTime ||
+            fad.ftLastWriteTime.dwHighDateTime != st.lastWrite.dwHighDateTime ||
+            fad.nFileSizeLow != st.lastSize) {
+            st.lastWrite = fad.ftLastWriteTime;
+            st.lastSize = fad.nFileSizeLow;
+            needReload = true;
+        }
+    }
+
+    if (needReload) {
+        auto fresh = std::make_shared<xmf::AppConfig>(xmf::LoadConfig());
+        st.topItems.clear();
+        for (const auto& it : fresh->items) {
+            if (it.enabled && it.parentId.empty() && it.kind != xmf::ItemKind::Separator) {
+                st.topItems.push_back(&it);
+            }
+        }
+        std::stable_sort(st.topItems.begin(), st.topItems.end(), [](const xmf::MenuItem* a, const xmf::MenuItem* b) {
+            return a->order < b->order;
+        });
+        st.iconCache.clear();
+        st.config = std::move(fresh);
+    }
+
+    if (outTopItems) *outTopItems = st.topItems;
+    return st.config;
+}
+
+std::wstring ResolveIconPathCached(const std::wstring& spec, const xmf::AppearanceConfig& appearance) {
+    if (spec.empty()) return {};
+    auto& st = ConfigCache();
+    std::lock_guard<std::mutex> lock(st.mtx);
+    auto it = st.iconCache.find(spec);
+    if (it != st.iconCache.end()) return it->second;
+    std::wstring resolved = xmf::ResolveIconPath(spec, appearance, g_hModule);
+    st.iconCache[spec] = resolved;
+    return resolved;
 }
 
 xmf::SelectionContext ExtractContext(IShellItemArray* items, IUnknown* site) {
@@ -434,11 +511,11 @@ public:
         if (!name) return E_POINTER;
         EnsureLoaded();
         if (IsSingleRootMode()) {
-            std::wstring title = config_.appearance.rootMenuTitle.empty() ? L"xMenuForge" : config_.appearance.rootMenuTitle;
+            std::wstring title = config_->appearance.rootMenuTitle.empty() ? L"xMenuForge" : config_->appearance.rootMenuTitle;
             return SHStrDupW(title.c_str(), name);
         }
         if (isOverflowSlot_) {
-            std::wstring title = config_.appearance.rootMenuTitle.empty() ? L"xMenuForge" : (config_.appearance.rootMenuTitle + L" More");
+            std::wstring title = config_->appearance.rootMenuTitle.empty() ? L"xMenuForge" : (config_->appearance.rootMenuTitle + L" More");
             return SHStrDupW(title.c_str(), name);
         }
         if (boundItem_) {
@@ -450,15 +527,15 @@ public:
     IFACEMETHODIMP GetIcon(IShellItemArray*, LPWSTR* icon) override {
         if (!icon) return E_POINTER;
         EnsureLoaded();
-        if (!config_.appearance.showIcons) {
+        if (!config_->appearance.showIcons) {
             *icon = nullptr;
             return E_NOTIMPL;
         }
-        std::wstring spec = config_.appearance.rootMenuIcon;
+        std::wstring spec = config_->appearance.rootMenuIcon;
         if (!IsSingleRootMode() && !isOverflowSlot_ && boundItem_ && !boundItem_->icon.empty()) {
             spec = boundItem_->icon;
         }
-        std::wstring resolved = xmf::ResolveIconPath(spec, config_.appearance, g_hModule);
+        std::wstring resolved = ResolveIconPathCached(spec, config_->appearance);
         if (resolved.empty()) {
             *icon = nullptr;
             return E_NOTIMPL;
@@ -484,7 +561,7 @@ public:
     IFACEMETHODIMP GetState(IShellItemArray* items, BOOL, EXPCMDSTATE* state) override {
         if (!state) return E_POINTER;
         EnsureLoaded();
-        if (!config_.integrations.modernContextMenuEnabled) {
+        if (!config_->integrations.modernContextMenuEnabled) {
             *state = ECS_HIDDEN;
             return S_OK;
         }
@@ -497,7 +574,7 @@ public:
                 *state = ECS_HIDDEN;
                 return S_OK;
             }
-            *state = xmf::HasAnyVisibleCommand(config_, L"", ctx) ? ECS_ENABLED : ECS_HIDDEN;
+            *state = xmf::HasAnyVisibleCommand(*config_, L"", ctx) ? ECS_ENABLED : ECS_HIDDEN;
             return S_OK;
         }
 
@@ -507,7 +584,7 @@ public:
             for (size_t i = kMaxRootSlots - 1; i < topItems_.size(); ++i) {
                 const auto* it = topItems_[i];
                 if (it->kind == xmf::ItemKind::Category) {
-                    if (xmf::MatchesContext(*it, ctx) && xmf::HasAnyVisibleCommand(config_, it->id, ctx)) {
+                    if (xmf::MatchesContext(*it, ctx) && xmf::HasAnyVisibleCommand(*config_, it->id, ctx)) {
                         any = true;
                         break;
                     }
@@ -526,7 +603,7 @@ public:
         }
 
         if (boundItem_->kind == xmf::ItemKind::Category) {
-            bool vis = xmf::MatchesContext(*boundItem_, ctx) && xmf::HasAnyVisibleCommand(config_, boundItem_->id, ctx);
+            bool vis = xmf::MatchesContext(*boundItem_, ctx) && xmf::HasAnyVisibleCommand(*config_, boundItem_->id, ctx);
             *state = vis ? ECS_ENABLED : ECS_HIDDEN;
         } else {
             *state = xmf::MatchesContext(*boundItem_, ctx) ? ECS_ENABLED : ECS_HIDDEN;
@@ -565,6 +642,16 @@ public:
     }
 
     static std::vector<std::pair<std::wstring, std::wstring>> DiscoverInstalledEditors() {
+        static std::mutex edMtx;
+        static ULONGLONG lastScanTick = 0;
+        static std::vector<std::pair<std::wstring, std::wstring>> cachedEditors;
+        {
+            std::lock_guard<std::mutex> lock(edMtx);
+            if (!cachedEditors.empty() && (GetTickCount64() - lastScanTick) < 60000) {
+                return cachedEditors;
+            }
+        }
+
         std::vector<std::pair<std::wstring, std::wstring>> editors;
         auto addEditor = [&](const std::wstring& name, const std::wstring& exe) {
             if (exe.empty() || !PathFileExistsW(exe.c_str())) return;
@@ -619,6 +706,11 @@ public:
         WCHAR sysDir[MAX_PATH] = {};
         GetSystemDirectoryW(sysDir, MAX_PATH);
         addEditor(L"Notepad", std::wstring(sysDir) + L"\\notepad.exe");
+        {
+            std::lock_guard<std::mutex> lock(edMtx);
+            cachedEditors = editors;
+            lastScanTick = GetTickCount64();
+        }
         return editors;
     }
 
@@ -634,14 +726,14 @@ public:
             LeafSpec spec;
             spec.id = item.id;
             spec.title = prefix + item.title;
-            spec.iconPath = xmf::ResolveIconPath(item.icon, config_.appearance, g_hModule);
+            spec.iconPath = ResolveIconPathCached(item.icon, config_->appearance);
             spec.tooltip = item.description;
             spec.separatorBefore = pendingSeparator && !built.empty();
             spec.itemCopy = item;
             spec.modifiers = modifiers_;
             pendingSeparator = false;
 
-            auto* cmd = new (std::nothrow) LeafCommand(std::move(spec), config_);
+            auto* cmd = new (std::nothrow) LeafCommand(std::move(spec), *config_);
             if (cmd) {
                 if (site_) cmd->SetSite(site_);
                 built.push_back(cmd);
@@ -650,7 +742,7 @@ public:
 
         auto flattenChildren = [&](const std::wstring& parentId, const std::wstring& prefix, auto& self) -> void {
             std::vector<const xmf::MenuItem*> kids;
-            for (const auto& it : config_.items) {
+            for (const auto& it : config_->items) {
                 if (it.enabled && it.parentId == parentId) kids.push_back(&it);
             }
             std::stable_sort(kids.begin(), kids.end(), [](const xmf::MenuItem* a, const xmf::MenuItem* b) {
@@ -692,7 +784,7 @@ public:
                 spec.isDirectEditor = true;
                 spec.editorExePath = edExe;
                 spec.modifiers = modifiers_;
-                auto* cmd = new (std::nothrow) LeafCommand(std::move(spec), config_);
+                auto* cmd = new (std::nothrow) LeafCommand(std::move(spec), *config_);
                 if (cmd) {
                     if (site_) cmd->SetSite(site_);
                     built.push_back(cmd);
@@ -727,24 +819,14 @@ public:
 
 private:
     bool IsSingleRootMode() const {
-        return config_.appearance.modernSubmenuMode == L"single" ||
-               config_.appearance.modernSubmenuMode == L"flatten";
+        return config_ && (config_->appearance.modernSubmenuMode == L"single" ||
+                           config_->appearance.modernSubmenuMode == L"flatten");
     }
 
     void EnsureLoaded() {
         if (loaded_) return;
-        config_ = xmf::LoadConfig();
+        config_ = GetCachedConfig(&topItems_);
         loaded_ = true;
-
-        topItems_.clear();
-        for (const auto& it : config_.items) {
-            if (it.enabled && it.parentId.empty() && it.kind != xmf::ItemKind::Separator) {
-                topItems_.push_back(&it);
-            }
-        }
-        std::stable_sort(topItems_.begin(), topItems_.end(), [](const xmf::MenuItem* a, const xmf::MenuItem* b) {
-            return a->order < b->order;
-        });
 
         if (topItems_.size() > static_cast<size_t>(kMaxRootSlots) && slotIndex_ == kMaxRootSlots - 1) {
             isOverflowSlot_ = true;
@@ -759,7 +841,7 @@ private:
     std::atomic_ulong refs_{1};
     int slotIndex_ = 0;
     IUnknown* site_ = nullptr;
-    xmf::AppConfig config_;
+    std::shared_ptr<const xmf::AppConfig> config_;
     bool loaded_ = false;
     std::vector<const xmf::MenuItem*> topItems_;
     const xmf::MenuItem* boundItem_ = nullptr;

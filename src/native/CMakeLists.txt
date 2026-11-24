@@ -16,7 +16,8 @@ add_library(xMenuForgeCommon STATIC
 target_include_directories(xMenuForgeCommon PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/common)
 target_compile_definitions(xMenuForgeCommon PUBLIC UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
 if(MSVC)
-  target_compile_options(xMenuForgeCommon PUBLIC /utf-8)
+  target_compile_options(xMenuForgeCommon PUBLIC /utf-8 $<$<CONFIG:Release>:/O2 /Oi /Ot /GL>)
+  target_link_options(xMenuForgeCommon INTERFACE $<$<CONFIG:Release>:/LTCG /OPT:REF /OPT:ICF>)
 endif()
 target_link_libraries(xMenuForgeCommon PUBLIC shell32 shlwapi dwmapi uxtheme)
 
