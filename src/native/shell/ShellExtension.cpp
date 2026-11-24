@@ -655,8 +655,13 @@ public:
         std::vector<std::pair<std::wstring, std::wstring>> editors;
         auto addEditor = [&](const std::wstring& name, const std::wstring& exe) {
             if (exe.empty() || !PathFileExistsW(exe.c_str())) return;
+            const wchar_t* newFile = PathFindFileNameW(exe.c_str());
             for (const auto& e : editors) {
-                if (_wcsicmp(e.second.c_str(), exe.c_str()) == 0) return;
+                if (_wcsicmp(e.second.c_str(), exe.c_str()) == 0 ||
+                    _wcsicmp(e.first.c_str(), name.c_str()) == 0 ||
+                    _wcsicmp(PathFindFileNameW(e.second.c_str()), newFile) == 0) {
+                    return;
+                }
             }
             editors.emplace_back(name, exe);
         };
