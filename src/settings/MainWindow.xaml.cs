@@ -1261,7 +1261,7 @@ public partial class MainWindow : Window
         var dlg = new SaveFileDialog
         {
             Title = "Backup xMenuForge Settings",
-            FileName = $"xMenuForge-backup-{DateTime.Now:yyyy-MM-dd}.json",
+            FileName = "xMenuForge-backup.json",
             Filter = "JSON Backup Files|*.json|All Files|*.*"
         };
         if (dlg.ShowDialog() == true)
