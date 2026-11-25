@@ -45,6 +45,17 @@ if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) {
 
 # 2. Build Native C++20 Shell Extension & Host
 Write-Host "[1/4] Building native C++20 shell extension and host..." -ForegroundColor Yellow
+$CMakeCache = Join-Path $NativeBuild "CMakeCache.txt"
+if (Test-Path $CMakeCache) {
+    $cachedMatch = Select-String -Path $CMakeCache -Pattern '^CMAKE_GENERATOR_INSTANCE:INTERNAL=(.+)$' | Select-Object -First 1
+    if ($cachedMatch -and $cachedMatch.Matches.Count -gt 0) {
+        $cachedInstance = $cachedMatch.Matches[0].Groups[1].Value.Trim()
+        if ($cachedInstance -and -not (Test-Path $cachedInstance)) {
+            Write-Host "Stale CMake Visual Studio instance detected ($cachedInstance); clearing native build cache..." -ForegroundColor Yellow
+            Remove-Item -Path $NativeBuild -Recurse -Force
+        }
+    }
+}
 & cmake -S $NativeSrc -B $NativeBuild -A x64
 if ($LASTEXITCODE -ne 0) { throw "CMake configure failed." }
 
