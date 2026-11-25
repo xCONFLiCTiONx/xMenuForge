@@ -25,13 +25,15 @@ SolidCompression=yes
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 PrivilegesRequired=admin
-CloseApplications=yes
+CloseApplications=no
+RestartApplications=no
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Files]
-Source: "dist\xMenuForge\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "dist\xMenuForge\xMenuForge.Shell.dll"; DestDir: "{app}"; Flags: ignoreversion restartreplace uninsrestartdelete
+Source: "dist\xMenuForge\*"; DestDir: "{app}"; Excludes: "unins*.*,*.pdb,*.old,xMenuForge.Shell.dll"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{group}\xMenuForge Settings"; Filename: "{app}\xMenuForge.Settings.exe"; IconFilename: "{app}\xMenuForge.ico"
