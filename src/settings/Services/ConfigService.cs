@@ -200,10 +200,15 @@ public static class ConfigService
         AddBuiltIn("builtin.wifi_passwords", "WiFi Passwords", "Display saved Wi-Fi SSIDs and passphrases", @"C:\WINDOWS\System32\imageres.dll,139", "wifi_passwords", false, false, true, "cat.system");
 
         // More Tools & External Apps
+        var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        var antigravityExe = Path.Combine(localAppData, "Programs", "Antigravity IDE", "Antigravity IDE.exe");
+        var dirIconExe = Path.Combine(localAppData, "xPrograms", "DirectoryIconTool", "DirectoryIconTool.exe");
+        var unlockFilesExe = Path.Combine(localAppData, "xPrograms", "UnlockFiles", "Unlock Files.exe");
+
         AddCategory("cat.07517bed", "More Tools", @"Icons\System Folders.ico", "ctrl", "cat.system", false);
         AddCustomApp("app.antigravity", "Open in Antigravity", "Open file or folder in Antigravity IDE",
-                     @"C:\Users\Michael\AppData\Local\Programs\Antigravity IDE\Antigravity IDE.exe,0",
-                     @"C:\Users\Michael\AppData\Local\Programs\Antigravity IDE\Antigravity IDE.exe",
+                     $"{antigravityExe},0",
+                     antigravityExe,
                      "\"{path}\"", true, true, true, false);
         AddBuiltIn("builtin.settings", "xMenuForge Settings", "Configure menus, commands, and execution rules", @"Icons\Settings.ico", "settings", true, true, true, "", "ctrl_alt");
         AddCustomApp("app.chrome", "Open in Chrome", "Open file in Google Chrome",
@@ -212,12 +217,12 @@ public static class ConfigService
                      "\"{path}\"", true, false, false, false, "cat.07517bed", "none",
                      [".html", ".htm", ".svg", ".pdf", ".webp", ".png", ".jpg", ".jpeg", ".gif", ".txt", ".json", ".xml"]);
         AddCustomApp("app.directory_icon_tool", "Directory Icon Tool", "Customize folder icons with DirectoryIconTool",
-                     @"C:\Users\Michael\AppData\Local\xPrograms\DirectoryIconTool\DirectoryIconTool.exe,0",
-                     @"C:\Users\Michael\AppData\Local\xPrograms\DirectoryIconTool\DirectoryIconTool.exe",
+                     $"{dirIconExe},0",
+                     dirIconExe,
                      "\"{path}\"", false, true, true, false, "cat.07517bed", "none");
         AddCustomApp("app.unlocker", "Unlocker", "Unlock locked files or folders with Unlock Files",
-                     @"C:\Users\Michael\AppData\Local\xPrograms\UnlockFiles\Unlock Files.exe,0",
-                     @"C:\Users\Michael\AppData\Local\xPrograms\UnlockFiles\Unlock Files.exe",
+                     $"{unlockFilesExe},0",
+                     unlockFilesExe,
                      "\"{path}\"", true, true, true, true, "cat.07517bed", "none");
 
         return cfg;
